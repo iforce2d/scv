@@ -253,10 +253,10 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
         glColor3f(1,0,1);
         glBegin(GL_POINTS);
         for (size_t i = 0; i < plan.moves.size(); i++) {
-            scv::move& l = plan.moves[i];
+            scv::move& m = plan.moves[i];
             if ( i == 0 )
-                glVertex3d( l.src.x, l.src.y, l.src.z );
-            glVertex3d( l.dst.x, l.dst.y, l.dst.z );
+                glVertex3d( m.src.x, m.src.y, m.src.z );
+            glVertex3d( m.dst.x, m.dst.y, m.dst.z );
         }
         glEnd();
     }
@@ -315,10 +315,10 @@ void randomizePoints() {
     scv::vec3 lastRandPos;
 
     for (size_t i = 0; i < plan.moves.size(); i++) {
-        scv::move& l = plan.moves[i];
+        scv::move& m = plan.moves[i];
 
         if ( i > 0 )
-            l.src = lastRandPos;
+            m.src = lastRandPos;
 
         scv::vec3 r;
 
@@ -326,13 +326,13 @@ void randomizePoints() {
             r = scv::vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
             r = r * plan.posLimitUpper;
             r += plan.posLimitLower;
-            l.src = r;
+            m.src = r;
         }
 
         r = scv::vec3(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
         r = r * plan.posLimitUpper;
         r += plan.posLimitLower;
-        l.dst = r;
+        m.dst = r;
 
         lastRandPos = r;
 
@@ -383,28 +383,29 @@ int main(int, char**)
     plan.setAccelerationLimits(1000, 1000, 1000);
     plan.setJerkLimits(2000, 2000, 2000);
 
-    scv::move l;
-    l.vel = 12;
-    l.acc = 400;
-    l.jerk = 800;
-    l.src = vec3( 1, 1, 0);
-    l.dst = vec3( 1, 1, 6);    plan.appendMove(l);
-    l.dst = vec3( 1, 9, 6);    plan.appendMove(l);
-    l.dst = vec3( 1, 9, 0);    plan.appendMove(l);
-    l.dst = vec3( 5, 9, 0);    plan.appendMove(l);
-    l.dst = vec3( 5, 5, 0);    plan.appendMove(l);
-    l.dst = vec3( 5, 1, 6);    plan.appendMove(l);
-    l.dst = vec3( 9, 1, 6);    plan.appendMove(l);
-    l.dst = vec3( 9, 1, 0);    plan.appendMove(l);
-    l.dst = vec3( 9, 9, 0);    plan.appendMove(l);
-    l.dst = vec3( 9, 9, 6);    plan.appendMove(l);
+    scv::move m;
+    m.vel = 12;
+    m.acc = 400;
+    m.jerk = 800;
+    m.blendType = CBT_MAX_JERK;
+    m.src = vec3( 1, 1, 0);
+    m.dst = vec3( 1, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 1, 9, 6);    plan.appendMove(m);
+    m.dst = vec3( 1, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 5, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 9, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 9, 1, 0);    plan.appendMove(m);
+    m.dst = vec3( 9, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 9, 9, 6);    plan.appendMove(m);
 
     plan.calculateMoves();
     //plan.printConstraints();
     //plan.printMoves();
     //plan.printSegments();
 
-    bool show_demo_window = false;
+    //bool show_demo_window = false;
     bool doRandomizePoints = false;
     float animSpeedScale = 1;
 
@@ -467,15 +468,14 @@ int main(int, char**)
         ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
         bgdl->AddCallback(backgroundRenderCallback, nullptr);
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
+        //if (show_demo_window)
+        //    ImGui::ShowDemoWindow(&show_demo_window);
 
         {
 
             ImGui::Begin("Settings");
 
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            //ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
 
             //showVec3Editor("animLoc", &animLoc);
 
@@ -513,39 +513,39 @@ int main(int, char**)
                 ImGui::Checkbox("Randomize", &doRandomizePoints);
 
                 if ( ! plan.moves.empty() ) {
-                    scv::move& l = plan.moves[0];
+                    scv::move& m = plan.moves[0];
                     if (ImGui::TreeNode("Point 0")) {
 
                         ImGui::SeparatorText("Location");
-                        showVec3Editor("Loc 0", &l.src);
+                        showVec3Editor("Loc 0", &m.src);
 
                         ImGui::TreePop();
                     }
                 }
 
                 for (size_t i = 0; i < plan.moves.size(); i++) {
-                    scv::move& l = plan.moves[i];
+                    scv::move& m = plan.moves[i];
                     sprintf(n, "Point %d", (int)(i+1));
                     if (ImGui::TreeNode(n)) {
 
                         ImGui::SeparatorText("Location");
                         sprintf(n, "Loc %d", (int)(i+1));
-                        showVec3Editor(n, &l.dst);
+                        showVec3Editor(n, &m.dst);
 
                         ImGui::SeparatorText("Constraints");
                         sprintf(n, "Vel %d", (int)(i+1));
-                        ImGui::InputDouble(n, &l.vel, 0.1f, 1.0f);
+                        ImGui::InputDouble(n, &m.vel, 0.1f, 1.0f);
                         sprintf(n, "Acc %d", (int)(i+1));
-                        ImGui::InputDouble(n, &l.acc, 0.1f, 1.0f);
+                        ImGui::InputDouble(n, &m.acc, 0.1f, 1.0f);
                         sprintf(n, "Jerk %d", (int)(i+1));
-                        ImGui::InputDouble(n, &l.jerk, 0.1f, 1.0f);
+                        ImGui::InputDouble(n, &m.jerk, 0.1f, 1.0f);
 
                         if ( i > 0 ) {
-                            int e = l.blendType;
+                            int e = m.blendType;
                             ImGui::RadioButton("None", &e, CBT_NONE); ImGui::SameLine();
                             ImGui::RadioButton("Min jerk", &e, CBT_MIN_JERK); ImGui::SameLine();
                             ImGui::RadioButton("Max jerk", &e, CBT_MAX_JERK);
-                            l.blendType = (cornerBlendType)e;
+                            m.blendType = (cornerBlendType)e;
                         }
 
                         ImGui::TreePop();
@@ -553,11 +553,11 @@ int main(int, char**)
                 }
 
                 for (size_t i = 1; i < plan.moves.size(); i++) {
-                    scv::move& l = plan.moves[i];
+                    scv::move& m = plan.moves[i];
                     scv::move& prevMove = plan.moves[i-1];
-                    l.src.x = prevMove.dst.x;
-                    l.src.y = prevMove.dst.y;
-                    l.src.z = prevMove.dst.z;
+                    m.src.x = prevMove.dst.x;
+                    m.src.y = prevMove.dst.y;
+                    m.src.z = prevMove.dst.z;
                 }
 
                 if (ImGui::Button("Add point")) {
@@ -566,19 +566,19 @@ int main(int, char**)
                         scv::move& el = plan.moves[ plan.moves.size()-1 ];
                         p = el.dst;
                     }
-                    scv::move l;
-                    l.src = p;
-                    l.dst = p + vec3( 2, 2, 2 );
-                    l.vel = 12;
-                    l.acc = 400;
-                    l.jerk = 800;
-                    plan.appendMove(l);
+                    scv::move m;
+                    m.src = p;
+                    m.dst = p + vec3( 2, 2, 2 );
+                    m.vel = 12;
+                    m.acc = 400;
+                    m.jerk = 800;
+                    plan.appendMove(m);
                 }
 
             }
 
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::Text("Calculation time %.1f us", calcTime);
+            ImGui::Text("Framerate average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            ImGui::Text("SCV calculation time %.1f us", calcTime);
 
             showPlots();
 

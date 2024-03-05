@@ -71,7 +71,8 @@ int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x
 
 
 
-planner::planner() {
+planner::planner()
+{
     posLimitLower = vec3_zero;
     posLimitUpper = vec3_zero;
     velLimit = vec3_zero;
@@ -80,7 +81,8 @@ planner::planner() {
     resetTraverse();
 }
 
-bool planner::calculateMoves() {
+bool planner::calculateMoves()
+{
 
     bool invalidSettings = false;
     if ( velLimit.LengthSquared() < 0.00001 ) {
@@ -129,7 +131,8 @@ void planner::clear()
     segments.clear();
 }
 
-void planner::calculateMove(move& l) {
+void planner::calculateMove(move& l)
+{
 
     scv::vec3 srcPos = l.src;
     scv::vec3 dstPos = l.dst;
@@ -361,7 +364,7 @@ bool planner::getTrajectoryState(double t, int *segmentIndex, vec3 *pos, vec3 *v
     size_t segmentInd = 0;
     while (segmentInd < segments.size()) {
         *segmentIndex = segmentInd;
-        scv::segment& s = segments[segmentInd];
+        segment& s = segments[segmentInd];
         double endT = totalT + s.duration;
         if ( t >= totalT && t < endT ) {
             getSegmentState(s, t - totalT, pos, vel, acc, jerk);
@@ -375,6 +378,17 @@ bool planner::getTrajectoryState(double t, int *segmentIndex, vec3 *pos, vec3 *v
     scv::segment& lastSegment = segments[segments.size()-1];
     getSegmentState(lastSegment, lastSegment.duration, pos, vel, acc, jerk);
     return false;
+}
+
+scv_float planner::getTotalTime()
+{
+    scv_float t = 0;
+    size_t segmentInd = 0;
+    while (segmentInd < segments.size()) {
+        segment& s = segments[segmentInd];
+        t += s.duration;
+    }
+    return t;
 }
 
 void planner::resetTraverse()
@@ -419,7 +433,8 @@ scv::vec3 GetClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir
 }
 
 // This assumes the jerk and acceleration are in the same direction
-scv_float calculateDurationFromJerkAndAcceleration(scv::vec3 j, scv::vec3 a) {
+scv_float calculateDurationFromJerkAndAcceleration(scv::vec3 j, scv::vec3 a)
+{
     if ( j.x != 0 )
         return sqrt( a.x / j.x );
     else if ( j.y != 0 )
@@ -430,7 +445,8 @@ scv_float calculateDurationFromJerkAndAcceleration(scv::vec3 j, scv::vec3 a) {
     return 0;
 }
 
-void markSkippedSegments(move& l, int whichEnd) {
+void markSkippedSegments(move& l, int whichEnd)
+{
     int numSegments = l.segments.size();
     if ( whichEnd == 0 ) { // remove the latter end
         if ( numSegments == 5 ) {
@@ -456,7 +472,8 @@ void markSkippedSegments(move& l, int whichEnd) {
     }
 }
 
-void planner::blendCorner(move& l0, move& l1) {
+void planner::blendCorner(move& l0, move& l1)
+{
 
     int numPrevSegments = l0.segments.size();
     int numNextSegments = l1.segments.size();

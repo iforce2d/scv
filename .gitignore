@@ -1,0 +1,4 @@
+src/visualizer/*.o
+src/visualizer/imgui.ini
+src/visualizer/visualizer
+

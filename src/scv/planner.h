@@ -86,6 +86,7 @@ namespace scv {
 
         void appendMove( move& l );
         bool calculateMoves();
+        scv_float getTotalTime();
         bool getTrajectoryState(scv_float time, int *segmentIndex, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
 
         void resetTraverse();

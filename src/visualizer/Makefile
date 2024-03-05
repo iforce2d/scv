@@ -15,8 +15,8 @@
 #CXX = clang++
 
 EXE = visualizer
-IMGUI_DIR = ../imgui
-IMPLOT_DIR = ../implot
+IMGUI_DIR = ../../imgui
+IMPLOT_DIR = ../../implot
 SCV_DIR = ../scv
 SOURCES = main.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp 
