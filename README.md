@@ -11,7 +11,7 @@ Partially based on this very useful explanation:
 
 This repo includes a visualizer app to experiment with settings and view an animated movement along the path.
 
-![alt text](https://www.iforce2d.net/tmp/scv/S-Curve visualizer_004.png)
+![alt text](https://www.iforce2d.net/tmp/scv/S-Curve_visualizer_004.png)
 
 ## Building the visualizer app
 

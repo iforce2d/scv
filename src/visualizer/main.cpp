@@ -153,11 +153,6 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     }
 
 
-//    size_t segmentIndex = 0;
-//    float timeBase = 0;
-//    int tCount = 0;
-//    float timeStepsOverFlow = 0;
-//    float timePerDivision = 0.01;
 
     numPlotPoints = 0;
 
@@ -199,7 +194,12 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
             break;
     }
 
-    /*vector<segment>& segments = plan.getSegments();
+    /*size_t segmentIndex = 0;
+    float timeBase = 0;
+    int tCount = 0;
+    float timeStepsOverFlow = 0;
+    float timePerDivision = 0.01;
+    vector<segment>& segments = plan.getSegments();
     while (segmentIndex < segments.size()) {
 
         scv::segment& s = segments[segmentIndex];
