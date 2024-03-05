@@ -74,7 +74,7 @@ To access the calculated path, you can use getTrajectoryState to find all state 
 
 `getTrajectoryState` could be considered a 'random access' method and is mostly useful for the visualizer, to check that the results are as intended. It works by looping through the individual segments every time which is not optimal. In an actual usage scenario typically only the position value is needed, it will only be accessed sequentially, and it should be returned as fast as possible. You can use `resetTraverse` and `advanceTraverse` to get just the position value in increasing increments of time:
 
-        bool stillGoing = plan.advanceTraverse( 0.01, &p );
+    bool stillGoing = plan.advanceTraverse( 0.01, &p );
 
 This uses some internal variables in the planner class internally for convenience to keep track of the total time, and will be slightly faster. `resetTraverse` will revert the time back to the start.
 
