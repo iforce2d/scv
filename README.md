@@ -26,7 +26,7 @@ To run the visualizer app, after cloning this repo you'll need to pull the requi
 
 To set up a plan and calculate the path:
 
-        using namespace scv;
+    using namespace scv;
     planner plan;
 
     plan.setPositionLimits(0, 0, 0, 10, 10, 7);
@@ -51,13 +51,13 @@ To set up a plan and calculate the path:
     m.dst = vec3(1, 9, 0);
     plan.appendMove(m);
 
-        plan.calculateMoves();
+    plan.calculateMoves();
 
-        double totalTime = plan.getTotalTime();
+    double totalTime = plan.getTotalTime();
 
 The `scv::move` has an explicit namespace qualifier to avoid ambiguity with std::move.
 
-`setVelocityLimits / setAccelerationLimits / setJerkLimits` each take xyz values to set the global constraints in each axis. `setPositionLimits` is currently only used in the visualizer to show the bounding box, and for stress testing the randomized paths.
+`setVelocityLimits` / `setAccelerationLimits` / `setJerkLimits` each take xyz values to set the global constraints in each axis. `setPositionLimits` is currently only used in the visualizer to show the bounding box, and for stress testing the randomized paths.
 
 Each individual move should be given non-zero limits, these will be applied in addition to the global limits, but can be different from move to move. The per-move limits are a magnitude along the direction of travel, not along an axis. So for example if the global velocity limits for x and y are both 10, a diagonal movement at 45 degrees would result in a maximum velocity of 14.142 in the direction of travel. But with a per-move velocity limit of 10, the maximum velocity in the direction of travel will be 10.
 
@@ -65,7 +65,7 @@ blendType can be one of `CBT_MAX_JERK`, `CBT_MIN_JERK`, `CBT_NONE`. Maximum jerk
 
 To access the calculated path, you can use getTrajectoryState to find all state variables at any given time point:
 
-    double time = 1.23;
+    double t = 1.23;
     int segmentIndex;
     vec3 p, v, a, j; // position, velocity, acceleration, jerk
     plan.getTrajectoryState(t, &segmentIndex, &p, &v, &a, &j);
@@ -78,12 +78,12 @@ To access the calculated path, you can use getTrajectoryState to find all state 
 
 This uses some internal variables in the planner class internally for convenience to keep track of the total time, and will be slightly faster. `resetTraverse` will revert the time back to the start.
 
-        vec3 p;
-        plan.resetTraverse();
-        while ( plan.advanceTraverse( 0.01, &p ) ) {
-                // do something with p
-        }
+    vec3 p;
+    plan.resetTraverse();
+    while ( plan.advanceTraverse( 0.01, &p ) ) {
         // do something with p
+    }
+    // do something with p
 
 Note that `advanceTraverse` will return false when the total time is reached, which will exit the while loop. You'll need to 'do something with p' one more time after the loop to ensure the final point is actually processed. The same applies for `getTrajectoryPoint`.
 
