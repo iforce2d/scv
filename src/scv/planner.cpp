@@ -10,7 +10,7 @@ namespace scv {
 
 // Stolen from GSL library
 // https://github.com/Starlink/gsl/blob/master/poly/solve_quadratic.c
-int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x1)
+static int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x1)
 {
   if (a == 0) /* Handle linear case */
     {
@@ -83,22 +83,21 @@ planner::planner()
 
 bool planner::calculateMoves()
 {
-
     bool invalidSettings = false;
-    if ( velLimit.LengthSquared() < 0.00001 ) {
-        printf("Velocity limit is zero!\n");
+    if ( velLimit.anyZero() ) {
+        printf("Global velocity limit has zero component!\n");
         invalidSettings = true;
     }
-    if ( accLimit.LengthSquared() < 0.00001 ) {
-        printf("Acceleration limit is zero!\n");
+    if ( accLimit.anyZero() ) {
+        printf("Global acceleration limit has zero component!\n");
         invalidSettings = true;
     }
-    if ( jerkLimit.LengthSquared() < 0.00001 ) {
-        printf("Jerk limit is zero!\n");
+    if ( jerkLimit.anyZero() ) {
+        printf("Global jerk limit has zero component!\n");
         invalidSettings = true;
     }
     if ( invalidSettings ) {
-        printf("Aborting link calculation due to invalid limits!\n");
+        printf("Aborting move calculation due to invalid global limits!\n");
         return false;
     }
 
@@ -131,11 +130,10 @@ void planner::clear()
     segments.clear();
 }
 
-void planner::calculateMove(move& l)
+void planner::calculateMove(move& m)
 {
-
-    scv::vec3 srcPos = l.src;
-    scv::vec3 dstPos = l.dst;
+    scv::vec3 srcPos = m.src;
+    scv::vec3 dstPos = m.dst;
     scv::vec3 ldir = dstPos - srcPos;
     double llen = ldir.Normalize();
 
@@ -143,9 +141,9 @@ void planner::calculateMove(move& l)
     scv::vec3 ba = getBoundedVector(ldir, accLimit);
     scv::vec3 bj = getBoundedVector(ldir, jerkLimit);
 
-    double v = min( (double)bv.Length(), l.vel); // target speed
-    double a = min( (double)ba.Length(), l.acc);
-    double j = min( (double)bj.Length(), l.jerk);
+    double v = min( (double)bv.Length(), m.vel); // target speed
+    double a = min( (double)ba.Length(), m.acc);
+    double j = min( (double)bj.Length(), m.jerk);
     double halfDistance = 0.5 * llen;     // half of the total distance we want to move
 
     double T = 2 * a / j;   // duration of both curve sections
@@ -204,10 +202,11 @@ void planner::calculateMove(move& l)
             double qa = 0.5 * j * t;
             double qb = 1.5 * j * t * t;
             double qc = j * t * t * t       - halfDistance;
-            double x0, x1;
+            double x0 = -99999;
+            double x1 = -99999;
             gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
             double bestSolution = max(x0, x1);
-            if ( bestSolution > 0 )
+            if ( bestSolution >= 0 )
                 TL = bestSolution;
         }
     }
@@ -238,7 +237,7 @@ void planner::calculateMove(move& l)
     c1.acc = scv::vec3_zero;
     c1.jerk = j * ldir;
     c1.duration = T1;
-    l.segments.push_back(c1);
+    m.segments.push_back(c1);
 
     // ss,vs,as are already calculated above, no need to change them for this one
 
@@ -250,7 +249,7 @@ void planner::calculateMove(move& l)
         c2.acc = as * ldir;
         c2.jerk = scv::vec3_zero;
         c2.duration = TL;
-        l.segments.push_back(c2);
+        m.segments.push_back(c2);
 
         t = TL;
         ps += (vs * t) + (as * t * t) / 2.0;
@@ -264,7 +263,7 @@ void planner::calculateMove(move& l)
     c3.acc = as * ldir;
     c3.jerk = -j * ldir;
     c3.duration = T2;
-    l.segments.push_back(c3);
+    m.segments.push_back(c3);
 
     t = T2;
     ps += (vs * t) + ((as * t * t) / 2.0) - ((j * t * t * t) / 6.0);
@@ -282,7 +281,7 @@ void planner::calculateMove(move& l)
         c4.acc = scv::vec3_zero;
         c4.jerk = scv::vec3_zero;
         c4.duration = remainingDistance / v;
-        l.segments.push_back(c4);
+        m.segments.push_back(c4);
 
         ps += vs * c4.duration; // a nice simple calculation for a change
     }
@@ -294,7 +293,7 @@ void planner::calculateMove(move& l)
     c5.acc = as * ldir;
     c5.jerk = -j * ldir;
     c5.duration = T2;
-    l.segments.push_back(c5);
+    m.segments.push_back(c5);
 
     t = T2;
     ps += (vs * t) + ((as * t * t) / 2.0) + (-j * t * t * t) / 6.0;
@@ -309,7 +308,7 @@ void planner::calculateMove(move& l)
         c6.acc = as * ldir;
         c6.jerk = scv::vec3_zero;
         c6.duration = TL;
-        l.segments.push_back(c6);
+        m.segments.push_back(c6);
 
         t = TL;
         ps += (vs * t) + (as * t * t) / 2.0;
@@ -323,20 +322,20 @@ void planner::calculateMove(move& l)
     c7.acc = as * ldir;
     c7.jerk = j * ldir;
     c7.duration = T1;
-    l.segments.push_back(c7);
+    m.segments.push_back(c7);
 }
 
-void planner::getSegmentState(segment& c, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
+void planner::getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
 {
-    *pos = c.pos + (t * c.vel) + ((t * t) / 2.0) * c.acc + ((t * t * t) / 6.0) * c.jerk;
-    *vel = c.vel + (t * c.acc) + ((t * t) / 2.0) * c.jerk;
-    *acc = c.acc + t * c.jerk;
-    *jerk = c.jerk;
+    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
+    *vel = s.vel + (t * s.acc) + ((t * t) / 2.0) * s.jerk;
+    *acc = s.acc + t * s.jerk;
+    *jerk = s.jerk;
 }
 
-void planner::getSegmentPosition(segment& c, double t, scv::vec3* pos )
+void planner::getSegmentPosition(segment& s, double t, scv::vec3* pos )
 {
-    *pos = c.pos + (t * c.vel) + ((t * t) / 2.0) * c.acc + ((t * t * t) / 6.0) * c.jerk;
+    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
 }
 
 bool planner::getTrajectoryState(double t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
@@ -387,6 +386,7 @@ scv_float planner::getTotalTime()
     while (segmentInd < segments.size()) {
         segment& s = segments[segmentInd];
         t += s.duration;
+        segmentInd++;
     }
     return t;
 }
@@ -399,6 +399,11 @@ void planner::resetTraverse()
 
 bool planner::advanceTraverse(double dt, vec3 *p)
 {
+    if ( segments.size() < 1 ) {
+        *p = vec3_zero;
+        return false;
+    }
+
     traversal_segmentTime += dt;
     segment& seg = segments[traversal_segmentIndex];
 
@@ -409,7 +414,7 @@ bool planner::advanceTraverse(double dt, vec3 *p)
     // segment, which could potentially reverse the direction of travel!
     while ( traversal_segmentTime > seg.duration ) {
         // exceeded current segment
-        if ( traversal_segmentIndex < ((int8_t)segments.size()-1) ) {
+        if ( traversal_segmentIndex < ((int)segments.size()-1) ) {
             // more segments remain
             traversal_segmentIndex++;
             traversal_segmentTime -= seg.duration;
@@ -426,7 +431,7 @@ bool planner::advanceTraverse(double dt, vec3 *p)
     return true;
 }
 
-scv::vec3 GetClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir, scv::vec3 point, double* d)
+scv::vec3 getClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir, scv::vec3 point, double* d)
 {
     *d = scv::dot( point - line_start, line_dir);
     return line_start + *d * line_dir;
@@ -493,7 +498,7 @@ void planner::blendCorner(move& l0, move& l1)
     l0dir.Normalize();
     l1dir.Normalize();
 
-    // find the constant speed sections in the middle of each link
+    // find the constant speed sections in the middle of each move
     segment& seg0 = numPrevSegments == 5 ? l0.segments[2] : l0.segments[3];
     segment& seg1 = numNextSegments == 5 ? l1.segments[2] : l1.segments[3];
     segment& seg2 = numNextSegments == 5 ? l1.segments[3] : l1.segments[4]; // segment after the outgoing linear phase
@@ -607,7 +612,8 @@ void planner::blendCorner(move& l0, move& l1)
         double qa = j.Length() / 2.0;
         double qb = 0;
         double qc = -v0.Length();
-        double x0 = 0, x1 = 0;
+        double x0 = -99999;
+        double x1 = -99999;
         gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
         double t = scv::max(x0, x1);
 
@@ -674,10 +680,10 @@ void planner::blendCorner(move& l0, move& l1)
         // find the usable start and end of each constant speed section
         scv::vec3 seg0Start, seg0End, seg1Start, seg1End;
 
-        seg0Start = 0.5 * (l0srcPos + l0dstPos); // earliest start is at middle of preceding link
-        seg0End = l0dstPos; // latest start is at end of preceding link
+        seg0Start = 0.5 * (l0srcPos + l0dstPos); // earliest start is at middle of preceding move
+        seg0End = l0dstPos; // latest start is at end of preceding move
 
-        seg1Start = l0dstPos;// seg0End; // earliest end is a beginning of following link
+        seg1Start = l0dstPos;// seg0End; // earliest end is a beginning of following move
         seg1End = 0.5 * (l1srcPos + l1dstPos); // latest end is at middle of following segment
 
 
@@ -686,7 +692,7 @@ void planner::blendCorner(move& l0, move& l1)
         scv::vec3 curveEndPointNormalized = curveEndPoint;
         curveEndPointNormalized.Normalize();
         scv_float dummy;
-        scv::vec3 cpoSpan = GetClosestPointOnInfiniteLine( l0srcPos, curveEndPointNormalized, projBase, &dummy);
+        scv::vec3 cpoSpan = getClosestPointOnInfiniteLine( l0srcPos, curveEndPointNormalized, projBase, &dummy);
 
         scv::vec3 dirForProjection = projBase - cpoSpan;
 
@@ -694,10 +700,10 @@ void planner::blendCorner(move& l0, move& l1)
 
         double A0, A1, B0, B1;
 
-        GetClosestPointOnInfiniteLine( projBase, dirForProjection, seg0Start, &A0);
-        GetClosestPointOnInfiniteLine( projBase, dirForProjection, seg0End, &A1 );
-        GetClosestPointOnInfiniteLine( projBase, dirForProjection, seg1Start, &B0 );
-        GetClosestPointOnInfiniteLine( projBase, dirForProjection, seg1End, &B1 );
+        getClosestPointOnInfiniteLine( projBase, dirForProjection, seg0Start, &A0);
+        getClosestPointOnInfiniteLine( projBase, dirForProjection, seg0End, &A1 );
+        getClosestPointOnInfiniteLine( projBase, dirForProjection, seg1Start, &B0 );
+        getClosestPointOnInfiniteLine( projBase, dirForProjection, seg1End, &B1 );
 
         double D0 = A1;
         double D1 = B0;
@@ -770,8 +776,11 @@ void planner::blendCorner(move& l0, move& l1)
         }
     }
     else {
-        // lower jerk to match longest corner curve
-        if ( longestAllowableLength != 0 ) { // a link that doubles back can have a zero length
+        // lower jerk to match longest corner curve        
+        if ( j.LengthSquared() == 0 ) { // a straight-line case where T was already decided, don't change it
+
+        }
+        else if ( longestAllowableLength != 0 ) { // a move that doubles back can have a zero length
             double ratio = maxJerkLength / longestAllowableLength;
             j *= ratio*ratio;
             T = calculateDurationFromJerkAndAcceleration(j, v1-v0);
@@ -816,19 +825,31 @@ void planner::blendCorner(move& l0, move& l1)
     l0.segments.push_back(c1);
 }
 
-void planner::appendMove(move &l)
+void planner::appendMove(move &m)
 {
-    if ( l.jerk == 0 ) {
-        printf("Ignoring link with zero jerk\n");
+    if ( m.vel == 0 ) {
+        printf("Ignoring move with zero velocity\n");
+        return;
+    }
+    if ( m.acc == 0 ) {
+        printf("Ignoring move with zero acceleration\n");
+        return;
+    }
+    if ( m.jerk == 0 ) {
+        printf("Ignoring move with zero jerk\n");
         return;
     }
 
     if ( ! moves.empty() ) {
-        move& lastLink = moves[moves.size()-1];
-        l.src = lastLink.dst;
+        move& lastMove = moves[moves.size()-1];
+        m.src = lastMove.dst;
+        if ( m.src == m.dst ) {
+            printf("Ignoring move with no actual dp\n");
+            return;
+        }
     }
 
-    moves.push_back(l);
+    moves.push_back(m);
 }
 
 void planner::collateSegments()
@@ -897,6 +918,7 @@ void planner::printSegments()
         printf("    vel : %f, %f, %f\n", s.vel.x, s.vel.y, s.vel.z);
         printf("    acc : %f, %f, %f\n", s.acc.x, s.acc.y, s.acc.z);
         printf("    jerk: %f, %f, %f\n", s.jerk.x, s.jerk.y, s.jerk.z);
+        printf("    duration: %f\n", s.duration);
     }
 }
 

@@ -1,6 +1,6 @@
 # S-curve trajectory calculator
 
-This code calculates a jerk limited path in 3D with blended corners. The path is initially formed by joining a sequence of points with straight line moves, each a 7-segment "s-curve". Limits on velocity, acceleration and jerk can be specified for each axis as global constraints, and each move can be given a separate limit on velocity, acceleration and jerk.
+This code calculates a jerk limited path in 3D with blended corners. The path is initially formed by joining a sequence of points with straight line moves, each a 7-segment "s-curve". Global limits on velocity, acceleration and jerk can be specified for each axis, and each move can be given an individual limit on velocity, acceleration and jerk.
 
 Adjacent moves can be blended to turn the corner smoothly, where the limits allow. Whether a corner can be blended depends on the velocities of the previous and next moves, the acceleration and jerk allowed, the length of the moves, and the angle between them.
 
@@ -18,9 +18,18 @@ This repo includes a visualizer app to experiment with settings and view an anim
 To run the visualizer app, after cloning this repo you'll need to pull the required imgui and implot submodules:
 
     git submodule update --init
+
+Build with the default makefile like:
+
     cd src/visualizer
     make
-    ./visualizer
+
+... or with CMake like:
+
+    cd src/visualizer
+    mkdir build
+    cd build
+    cmake ../visualizer
 
 ## Usage
 

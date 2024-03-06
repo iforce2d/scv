@@ -32,6 +32,11 @@ namespace scv {
             x -= v.x; y -= v.y; z -= v.z;
         }
 
+        bool operator == (const vec3& b)
+        {
+            return x == b.x && y == b.y && z == b.z;
+        }
+
         void operator *= (scv_float a)
         {
             x *= a; y *= a; z *= a;
@@ -45,6 +50,11 @@ namespace scv {
         scv_float LengthSquared() const
         {
             return x * x + y * y + z * z;
+        }
+
+        bool anyZero() const
+        {
+            return x == 0 || y == 0 || z == 0;
         }
 
         scv_float Normalize()

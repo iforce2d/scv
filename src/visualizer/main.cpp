@@ -84,7 +84,7 @@ void drawPlannerBoundingBox() {
 }
 
 // These arrays will be used to draw the plots
-#define MAXPLOTPOINTS 2048
+#define MAXPLOTPOINTS 1024
 float plotTime[MAXPLOTPOINTS]; // x axis of the plot, all others are y-axis values
 float plotPosX[MAXPLOTPOINTS], plotPosY[MAXPLOTPOINTS], plotPosZ[MAXPLOTPOINTS];
 float plotVelX[MAXPLOTPOINTS], plotVelY[MAXPLOTPOINTS], plotVelZ[MAXPLOTPOINTS];
@@ -104,10 +104,37 @@ vec3 animLoc;
 bool showBoundingBox = true;
 bool showControlPoints = true;
 
+bool haveViolation = false;
+
+bool violation(vec3& p, vec3& j, vec3& dp, vec3& dv, vec3& da, vec3& dj) {
+    double margin = 1.0001;
+    if ( p.x < plan.posLimitLower.x * margin ) return true;
+    if ( p.y < plan.posLimitLower.y * margin ) return true;
+    if ( p.z < plan.posLimitLower.z * margin ) return true;
+    if ( p.x > plan.posLimitUpper.x * margin ) return true;
+    if ( p.y > plan.posLimitUpper.y * margin ) return true;
+    if ( p.z > plan.posLimitUpper.z * margin ) return true;
+    if ( fabs(dp.x) > plan.velLimit.x * margin ) return true;
+    if ( fabs(dp.y) > plan.velLimit.y * margin ) return true;
+    if ( fabs(dp.z) > plan.velLimit.z * margin ) return true;
+    if ( fabs(dv.x) > plan.accLimit.x * margin ) return true;
+    if ( fabs(dv.y) > plan.accLimit.y * margin ) return true;
+    if ( fabs(dv.z) > plan.accLimit.z * margin ) return true;
+    if ( fabs(da.x) > plan.jerkLimit.x * margin ) return true;
+    if ( fabs(da.y) > plan.jerkLimit.y * margin ) return true;
+    if ( fabs(da.z) > plan.jerkLimit.z * margin ) return true;
+    if ( fabs(j.x) > plan.jerkLimit.x * margin ) return true;
+    if ( fabs(j.y) > plan.jerkLimit.y * margin ) return true;
+    if ( fabs(j.z) > plan.jerkLimit.z * margin ) return true;
+    return false;
+}
+
 // This function will be called during ImGui's rendering, while drawing the background.
 // Draw all our stuff here so the GUI windows will then be over the top of it. Need to
 // re-enable scissor test after we're done.
 void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cmd) {
+
+    haveViolation = false;
 
     // calculate the trajectory every frame, and measure the time taken
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
@@ -153,6 +180,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     }
 
 
+    vec3 vp;
 
     numPlotPoints = 0;
 
@@ -160,6 +188,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     glBegin(GL_POINTS);
 
     vec3 p, v, a, j; // position, velocity, acceleration, jerk
+    vec3 lp, lv, la, lj;
     double t = 0;
     int count = 0;
     int segmentIndex;
@@ -167,8 +196,19 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 
         bool stillOnPath = plan.getTrajectoryState(t, &segmentIndex, &p, &v, &a, &j);
 
-        vec3 c = colors[segmentIndex%3];
+        vec3 dp = p - lp;
+        vec3 dv = v - lv;
+        vec3 da = a - la;
+        vec3 dj = j - lj;
+
+        if ( count > 0 && violation(p, j, dp, dv, da, dj) ) {
+            haveViolation = true;
+            vp = p;
+        }
+
+        vec3 c = colors[segmentIndex % 3];
         glColor3f(c.x,c.y,c.z);
+
         glVertex3f( p.x, p.y, p.z );
 
         if ( count < MAXPLOTPOINTS ) {
@@ -192,6 +232,11 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 
         if ( ! stillOnPath )
             break;
+
+        lp = p;
+        lv = v;
+        la = a;
+        lj = j;
     }
 
     /*size_t segmentIndex = 0;
@@ -272,6 +317,14 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     glVertex3d( animLoc.x, animLoc.y, animLoc.z );
     glEnd();
 
+    if ( haveViolation ) {
+        glPointSize(12);
+        glColor3f(1,0,0);
+        glBegin(GL_POINTS);
+        glVertex3d( vp.x, vp.y, vp.z );
+        glEnd();
+    }
+
     glPopMatrix();
 
     glMatrixMode(GL_PROJECTION);
@@ -351,6 +404,109 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
+void loadTestCase_default() {
+    plan.clear();
+    plan.setPositionLimits(0, 0, 0, 10, 10, 7);
+
+    scv::move m;
+    m.vel = 12;
+    m.acc = 400;
+    m.jerk = 800;
+    m.blendType = CBT_MAX_JERK;
+    m.src = vec3( 1, 1, 0);
+    m.dst = vec3( 1, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 1, 9, 6);    plan.appendMove(m);
+    m.dst = vec3( 1, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 5, 0);    plan.appendMove(m);
+    m.dst = vec3( 5, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 9, 1, 6);    plan.appendMove(m);
+    m.dst = vec3( 9, 1, 0);    plan.appendMove(m);
+    m.dst = vec3( 9, 9, 0);    plan.appendMove(m);
+    m.dst = vec3( 9, 9, 6);    plan.appendMove(m);
+
+    plan.calculateMoves();
+    plan.resetTraverse();
+}
+
+// awkward things can happen when three points are colinear
+void loadTestCase_straight() {
+    plan.clear();
+    plan.setPositionLimits(0, 0, 0, 10, 10, 10);
+
+    scv::move m;
+    m.vel = 6;
+    m.acc = 200;
+    m.jerk = 800;
+    m.blendType = CBT_MIN_JERK;
+    m.src = vec3( 1, 1, 0);
+    m.dst = vec3( 5, 1, 0);               plan.appendMove(m);
+    m.dst = vec3( 9, 1, 0);  m.vel = 12;  plan.appendMove(m);
+    m.dst = vec3( 9, 1, 5);  m.vel = 12;  plan.appendMove(m);
+    m.dst = vec3( 9, 1, 9);  m.vel = 6;   plan.appendMove(m);
+    m.dst = vec3( 9, 5, 9);  m.vel = 3;   plan.appendMove(m);
+    m.dst = vec3( 9, 9, 9);  m.vel = 12;  plan.appendMove(m);
+
+    plan.calculateMoves();
+    plan.resetTraverse();
+}
+
+// even more awkward things can happen when a move is exactly opposite to the previous move
+void loadTestCase_retrace() {
+    plan.clear();
+    plan.setPositionLimits(0, 0, 0, 10, 10, 10);
+
+    plan.setVelocityLimits(10, 10, 10);
+    plan.setAccelerationLimits(20, 20, 10);
+    plan.setJerkLimits(20, 20, 20);
+
+    scv::move m;
+    m.vel = 12;
+    m.acc = 200;
+    m.jerk = 800;
+    m.blendType = CBT_MIN_JERK;
+    m.src = vec3( 1, 1, 0);
+    m.dst = vec3( 6, 1, 0);  m.vel = 6;   plan.appendMove(m);
+    m.dst = vec3( 3, 1, 0);  m.vel = 12;  plan.appendMove(m);
+    m.dst = vec3( 9, 1, 0);  m.vel = 8;   plan.appendMove(m);
+    m.dst = vec3( 9, 1, 5);  m.vel = 12;  plan.appendMove(m);
+    m.dst = vec3( 9, 1, 0);  m.vel = 9;   plan.appendMove(m);
+    m.dst = vec3( 9, 1, 9);  m.vel = 6;   plan.appendMove(m);
+    m.dst = vec3( 9, 5, 9);  m.vel = 2;   plan.appendMove(m);
+    m.dst = vec3( 9,0.2,9);  m.vel = 3;   plan.appendMove(m);
+    m.dst = vec3( 9, 9, 9);  m.vel = 10;  plan.appendMove(m);
+
+    plan.calculateMoves();
+    plan.resetTraverse();
+}
+
+void loadTestCase_malformed() {
+    plan.clear();
+    plan.setPositionLimits(0, 0, 0, 10, 10, 7);
+
+    scv::move m;
+    m.vel = 0;
+    m.acc = 0;
+    m.jerk = 0;
+    m.blendType = CBT_MIN_JERK;
+    m.src = vec3(0, 0, 0);
+    m.dst = vec3(0, 0, 0);  plan.appendMove(m);
+    m.dst = vec3(0, 0, 0);  plan.appendMove(m);
+    m.dst = vec3(0, 0, 0);  plan.appendMove(m);
+    m.jerk = 1;
+    m.dst = vec3(1, 1, 0);  plan.appendMove(m);
+    m.jerk = 0;
+    m.dst = vec3(2, 0, 0);  plan.appendMove(m);
+    m.jerk = 1;
+    m.acc = 1;
+    m.dst = vec3(3, 1, 0);  plan.appendMove(m);
+    m.vel = 1;
+    m.dst = vec3(3, 1, 0);  plan.appendMove(m);
+
+    plan.calculateMoves();
+    plan.resetTraverse();
+}
+
 int main(int, char**)
 {
     glfwSetErrorCallback(glfw_error_callback);
@@ -375,37 +531,21 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     //io.Fonts->AddFontFromFileTTF("/usr/share/fonts/gnu-free/FreeSans.ttf", 16.0f);
 
-    camera.setLocation(-5, -10, 10);
-    camera.setDirection( 28, -25 );
+    camera.setLocation(-5, -10, 11);
+    camera.setDirection( 28, -24 );
 
-    plan.setPositionLimits(0, 0, 0, 10, 10, 7);
     plan.setVelocityLimits(200, 200, 200);
     plan.setAccelerationLimits(1000, 1000, 1000);
     plan.setJerkLimits(2000, 2000, 2000);
 
-    scv::move m;
-    m.vel = 12;
-    m.acc = 400;
-    m.jerk = 800;
-    m.blendType = CBT_MAX_JERK;
-    m.src = vec3( 1, 1, 0);
-    m.dst = vec3( 1, 1, 6);    plan.appendMove(m);
-    m.dst = vec3( 1, 9, 6);    plan.appendMove(m);
-    m.dst = vec3( 1, 9, 0);    plan.appendMove(m);
-    m.dst = vec3( 5, 9, 0);    plan.appendMove(m);
-    m.dst = vec3( 5, 5, 0);    plan.appendMove(m);
-    m.dst = vec3( 5, 1, 6);    plan.appendMove(m);
-    m.dst = vec3( 9, 1, 6);    plan.appendMove(m);
-    m.dst = vec3( 9, 1, 0);    plan.appendMove(m);
-    m.dst = vec3( 9, 9, 0);    plan.appendMove(m);
-    m.dst = vec3( 9, 9, 6);    plan.appendMove(m);
+    loadTestCase_default();
 
-    plan.calculateMoves();
     //plan.printConstraints();
     //plan.printMoves();
     //plan.printSegments();
 
     //bool show_demo_window = false;
+    bool stopOnViolation = false;
     bool doRandomizePoints = false;
     float animSpeedScale = 1;
 
@@ -419,8 +559,12 @@ int main(int, char**)
         if ( io.Framerate != 0 ) // framerate will be zero on first frame
             animAdvance = 1 / io.Framerate * animSpeedScale;
 
+        if ( stopOnViolation && haveViolation )
+            doRandomizePoints = false;
+
         if ( doRandomizePoints ) {
             randomizePoints();
+            plan.resetTraverse();
         }
 
         if ( ImGui::IsMouseDown(1) ) {// hold right mouse button to pan view
@@ -468,29 +612,33 @@ int main(int, char**)
         ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
         bgdl->AddCallback(backgroundRenderCallback, nullptr);
 
-        //if (show_demo_window)
-        //    ImGui::ShowDemoWindow(&show_demo_window);
-
         {
-
             ImGui::Begin("Settings");
 
-            //ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            //ImGui::Checkbox("Demo Window", &show_demo_window);
 
-            //showVec3Editor("animLoc", &animLoc);
+            ImGui::Text("WASD, left shift, left ctrl to move camera.\n"
+                        "Hold right mouse button and drag to rotate camera.\n"
+                        "T to restart animation");
 
             char n[128];
 
             if (ImGui::CollapsingHeader("Display options"))
             {
-                if (ImGui::BeginTable("split", 3))
+                if (ImGui::BeginTable("split", 2))
                 {
                     ImGui::TableNextColumn(); ImGui::Checkbox("Show bounding box", &showBoundingBox);
                     ImGui::TableNextColumn(); ImGui::Checkbox("Show control points", &showControlPoints);
                     ImGui::EndTable();
                 }
 
-                ImGui::SliderFloat("Animation speed", &animSpeedScale, 0, 5);
+
+            }
+
+            if (ImGui::CollapsingHeader("Animation"))
+            {
+                ImGui::SliderFloat("Speed scale", &animSpeedScale, 0, 5);
+                showVec3Editor("animLoc", &animLoc);
             }
 
             if (ImGui::CollapsingHeader("Planner settings"))
@@ -510,80 +658,127 @@ int main(int, char**)
 
             if (ImGui::CollapsingHeader("Control points"))
             {
-                ImGui::Checkbox("Randomize", &doRandomizePoints);
 
-                if ( ! plan.moves.empty() ) {
-                    scv::move& m = plan.moves[0];
-                    if (ImGui::TreeNode("Point 0")) {
-
-                        ImGui::SeparatorText("Location");
-                        showVec3Editor("Loc 0", &m.src);
-
-                        ImGui::TreePop();
+                if (ImGui::Button("All min jerk")) {
+                    for (size_t i = 0; i < plan.moves.size(); i++) {
+                        scv::move& m = plan.moves[i];
+                        m.blendType = CBT_MIN_JERK;
+                    }
+                } ImGui::SameLine();
+                if (ImGui::Button("All max jerk")) {
+                    for (size_t i = 0; i < plan.moves.size(); i++) {
+                        scv::move& m = plan.moves[i];
+                        m.blendType = CBT_MAX_JERK;
                     }
                 }
 
-                for (size_t i = 0; i < plan.moves.size(); i++) {
-                    scv::move& m = plan.moves[i];
-                    sprintf(n, "Point %d", (int)(i+1));
-                    if (ImGui::TreeNode(n)) {
+                ImGui::SeparatorText("Tests");
 
-                        ImGui::SeparatorText("Location");
-                        sprintf(n, "Loc %d", (int)(i+1));
-                        showVec3Editor(n, &m.dst);
+                if (ImGui::Button("Default")) {
+                    doRandomizePoints = false;
+                    loadTestCase_default();
+                } ImGui::SameLine();
+                if (ImGui::Button("Straight")) {
+                    doRandomizePoints = false;
+                    loadTestCase_straight();
+                } ImGui::SameLine();
+                if (ImGui::Button("Retrace")) {
+                    doRandomizePoints = false;
+                    loadTestCase_retrace();
+                } ImGui::SameLine();
+                if (ImGui::Button("Malformed")) {
+                    doRandomizePoints = false;
+                    loadTestCase_malformed();
+                }
 
-                        ImGui::SeparatorText("Constraints");
-                        sprintf(n, "Vel %d", (int)(i+1));
-                        ImGui::InputDouble(n, &m.vel, 0.1f, 1.0f);
-                        sprintf(n, "Acc %d", (int)(i+1));
-                        ImGui::InputDouble(n, &m.acc, 0.1f, 1.0f);
-                        sprintf(n, "Jerk %d", (int)(i+1));
-                        ImGui::InputDouble(n, &m.jerk, 0.1f, 1.0f);
+                ImGui::Checkbox("Randomize points", &doRandomizePoints);
+                ImGui::Checkbox("Stop on violation", &stopOnViolation);
 
-                        if ( i > 0 ) {
-                            int e = m.blendType;
-                            ImGui::RadioButton("None", &e, CBT_NONE); ImGui::SameLine();
-                            ImGui::RadioButton("Min jerk", &e, CBT_MIN_JERK); ImGui::SameLine();
-                            ImGui::RadioButton("Max jerk", &e, CBT_MAX_JERK);
-                            m.blendType = (cornerBlendType)e;
+                if (ImGui::TreeNode("Customize points"))
+                {
+                    if (ImGui::Button("Add point")) {
+                        vec3 p = vec3_zero;
+                        if ( ! plan.moves.empty() ) {
+                            scv::move& el = plan.moves[ plan.moves.size()-1 ];
+                            p = el.dst;
                         }
-
-                        ImGui::TreePop();
+                        scv::move m;
+                        m.src = p;
+                        m.dst = p + vec3( 2, 2, 2 );
+                        m.vel = 10;
+                        m.acc = 400;
+                        m.jerk = 800;
+                        plan.appendMove(m);
                     }
-                }
 
-                for (size_t i = 1; i < plan.moves.size(); i++) {
-                    scv::move& m = plan.moves[i];
-                    scv::move& prevMove = plan.moves[i-1];
-                    m.src.x = prevMove.dst.x;
-                    m.src.y = prevMove.dst.y;
-                    m.src.z = prevMove.dst.z;
-                }
-
-                if (ImGui::Button("Add point")) {
-                    vec3 p = vec3_zero;
                     if ( ! plan.moves.empty() ) {
-                        scv::move& el = plan.moves[ plan.moves.size()-1 ];
-                        p = el.dst;
-                    }
-                    scv::move m;
-                    m.src = p;
-                    m.dst = p + vec3( 2, 2, 2 );
-                    m.vel = 12;
-                    m.acc = 400;
-                    m.jerk = 800;
-                    plan.appendMove(m);
-                }
+                        scv::move& m = plan.moves[0];
+                        if (ImGui::TreeNode("Point 0")) {
 
+                            ImGui::SeparatorText("Location");
+                            showVec3Editor("Loc 0", &m.src);
+
+                            ImGui::TreePop();
+                        }
+                    }
+
+                    for (size_t i = 0; i < plan.moves.size(); i++) {
+                        scv::move& m = plan.moves[i];
+                        sprintf(n, "Point %d", (int)(i+1));
+                        if (ImGui::TreeNode(n)) {
+
+                            ImGui::SeparatorText("Location");
+                            sprintf(n, "Loc %d", (int)(i+1));
+                            showVec3Editor(n, &m.dst);
+
+                            ImGui::SeparatorText("Constraints");
+                            sprintf(n, "Vel %d", (int)(i+1));
+                            ImGui::InputDouble(n, &m.vel, 0.1f, 1.0f);
+                            sprintf(n, "Acc %d", (int)(i+1));
+                            ImGui::InputDouble(n, &m.acc, 0.1f, 1.0f);
+                            sprintf(n, "Jerk %d", (int)(i+1));
+                            ImGui::InputDouble(n, &m.jerk, 0.1f, 1.0f);
+
+                            if ( i > 0 ) {
+                                int e = m.blendType;
+                                ImGui::RadioButton("None", &e, CBT_NONE); ImGui::SameLine();
+                                ImGui::RadioButton("Min jerk", &e, CBT_MIN_JERK); ImGui::SameLine();
+                                ImGui::RadioButton("Max jerk", &e, CBT_MAX_JERK);
+                                m.blendType = (cornerBlendType)e;
+                            }
+
+                            ImGui::TreePop();
+                        }
+                    }
+
+                    for (size_t i = 1; i < plan.moves.size(); i++) {
+                        scv::move& m = plan.moves[i];
+                        scv::move& prevMove = plan.moves[i-1];
+                        m.src.x = prevMove.dst.x;
+                        m.src.y = prevMove.dst.y;
+                        m.src.z = prevMove.dst.z;
+                    }
+
+                    ImGui::TreePop();
+                }
             }
 
-            ImGui::Text("Framerate average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::Text("SCV calculation time %.1f us", calcTime);
+            if (ImGui::CollapsingHeader("Stats"))
+            {
+                ImGui::Text("Calculation time %.1f us", calcTime);
+                ImGui::Text("Violation: %s", haveViolation ? "yes":"no");
+                ImGui::Text("Num segments: %d",(int)plan.getSegments().size());
+                ImGui::Text("Traverse time: %f",plan.getTotalTime());
+                ImGui::Text("Framerate average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            }
 
             showPlots();
 
             ImGui::End();
         }
+
+        //if (show_demo_window)
+        //    ImGui::ShowDemoWindow(&show_demo_window);
 
         ImGui::Render();
         int display_w, display_h;
