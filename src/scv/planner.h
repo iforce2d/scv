@@ -38,6 +38,7 @@ namespace scv {
         double acc;
         double jerk;
         cornerBlendType blendType;
+        scv_float blendClearance;
 
         std::vector<segment> segments;
 
@@ -48,6 +49,7 @@ namespace scv {
             acc = 0;
             jerk = 0;
             blendType = CBT_MAX_JERK;
+            blendClearance = -1; // none
         }
     };
 
@@ -66,11 +68,11 @@ namespace scv {
         int traversal_segmentIndex;
         scv_float traversal_segmentTime;
 
-        void calculateMove(move& l);
-        void blendCorner(move& l0, move& l1);
+        void calculateMove(move& m);
+        void blendCorner(move& m0, move& m1, bool isFirst, bool isLast);
         void collateSegments();
-        void getSegmentState(segment& c, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
-        void getSegmentPosition(segment& c, double t, scv::vec3* pos);
+        void getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
+        void getSegmentPosition(segment& s, double t, scv::vec3* pos);
         std::vector<segment>& getSegments();
 
     // The actual public part would normally start from here
@@ -86,7 +88,7 @@ namespace scv {
 
         void appendMove( move& l );
         bool calculateMoves();
-        scv_float getTotalTime();
+        scv_float getTraverseTime();
         bool getTrajectoryState(scv_float time, int *segmentIndex, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
 
         void resetTraverse();

@@ -26,7 +26,7 @@ Build with the default makefile like:
 
 ... or with CMake like:
 
-    cd src/visualizer
+    cd src
     mkdir build
     cd build
     cmake ../visualizer
@@ -62,7 +62,7 @@ To set up a plan and calculate the path:
 
     plan.calculateMoves();
 
-    double totalTime = plan.getTotalTime();
+    double totalTime = plan.getTraverseTime();
 
 The `scv::move` has an explicit namespace qualifier to avoid ambiguity with std::move.
 

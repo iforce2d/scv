@@ -409,6 +409,7 @@ void loadTestCase_default() {
     plan.setPositionLimits(0, 0, 0, 10, 10, 7);
 
     scv::move m;
+    m.blendClearance = 0;
     m.vel = 12;
     m.acc = 400;
     m.jerk = 800;
@@ -455,10 +456,6 @@ void loadTestCase_straight() {
 void loadTestCase_retrace() {
     plan.clear();
     plan.setPositionLimits(0, 0, 0, 10, 10, 10);
-
-    plan.setVelocityLimits(10, 10, 10);
-    plan.setAccelerationLimits(20, 20, 10);
-    plan.setJerkLimits(20, 20, 20);
 
     scv::move m;
     m.vel = 12;
@@ -768,8 +765,8 @@ int main(int, char**)
                 ImGui::Text("Calculation time %.1f us", calcTime);
                 ImGui::Text("Violation: %s", haveViolation ? "yes":"no");
                 ImGui::Text("Num segments: %d",(int)plan.getSegments().size());
-                ImGui::Text("Traverse time: %f",plan.getTotalTime());
-                ImGui::Text("Framerate average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+                ImGui::Text("Traverse time: %.2f",plan.getTraverseTime());
+                ImGui::Text("Average framerate: %.1f fps)", io.Framerate);
             }
 
             showPlots();
