@@ -408,7 +408,7 @@ bool planner::advanceTraverse(double dt, vec3 *p)
     }
 
     traversal_segmentTime += dt;
-    segment& seg = segments[traversal_segmentIndex];
+    segment seg = segments[traversal_segmentIndex];
 
     // Use 'while' here to consume zero-duration (or otherwise very short) segments immediately!
     // It's pretty important to make sure that dt is actually within the next segment instead of
