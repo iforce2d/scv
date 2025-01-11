@@ -6,11 +6,13 @@
 // The straight-line part of this is described here:
 // http://www.et.byu.edu/~ered/ME537/Notes/Ch5.pdf
 
+extern float maxOverlapFraction;
+
 namespace scv {
 
 // Stolen from GSL library
 // https://github.com/Starlink/gsl/blob/master/poly/solve_quadratic.c
-static int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x1)
+static int gsl_poly_solve_quadratic(scv_float a, scv_float b, scv_float c, scv_float *x0, scv_float *x1)
 {
   if (a == 0) /* Handle linear case */
     {
@@ -26,22 +28,22 @@ static int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, do
     }
 
   {
-    double disc = b * b - 4 * a * c;
+    scv_float disc = b * b - 4 * a * c;
 
     if (disc > 0)
       {
         if (b == 0)
           {
-            double r = sqrt (-c / a);
+            scv_float r = sqrt (-c / a);
             *x0 = -r;
             *x1 =  r;
           }
         else
           {
-            double sgnb = (b > 0 ? 1 : -1);
-            double temp = -0.5 * (b + sgnb * sqrt (disc));
-            double r1 = temp / a ;
-            double r2 = c / temp ;
+            scv_float sgnb = (b > 0 ? 1 : -1);
+            scv_float temp = -0.5 * (b + sgnb * sqrt (disc));
+            scv_float r1 = temp / a ;
+            scv_float r2 = c / temp ;
 
             if (r1 < r2)
               {
@@ -73,6 +75,7 @@ static int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, do
 
 planner::planner()
 {
+    blendMethod = CBM_NONE;
     posLimitLower = vec3_zero;
     posLimitUpper = vec3_zero;
     velLimit = vec3_zero;
@@ -103,24 +106,51 @@ bool planner::calculateMoves()
 
     for (size_t i = 0; i < moves.size(); i++) {
         scv::move& m = moves[i];
-
-        calculateMove(m);
-
-        if ( i > 0 && m.blendType != CBT_NONE ) {
-            move& prevMove = moves[i-1];
-            bool isFirst = i == 1;
-            bool isLast = i == (moves.size()-1);
-            blendCorner( prevMove, m, isFirst, isLast );
+        if ( m.vel <= 0 ) {
+            printf("Move velocity limit is zero!\n");
+            invalidSettings = true;
+        }
+        if ( m.acc <= 0 ) {
+            printf("Move acceleration limit is zero!\n");
+            invalidSettings = true;
+        }
+        if ( m.jerk <= 0 ) {
+            printf("Move jerk limit is zero!\n");
+            invalidSettings = true;
+        }
+        if ( invalidSettings ) {
+            printf("Aborting move calculation due to invalid move limits!\n");
+            return false;
         }
     }
 
     for (size_t i = 0; i < moves.size(); i++) {
-        move& m = moves[i];
-        std::vector<segment>& segs = m.segments;
-        segs.erase( std::remove_if(std::begin(segs), std::end(segs), [](segment& s) { return s.toDelete || s.duration <= 0; }), segs.end());
+        scv::move& m = moves[i];
+
+        calculateMove(m);
+
+        if ( blendMethod == CBM_CONSTANT_JERK_SEGMENTS ) {
+            if ( i > 0 && m.blendType != CBT_NONE ) {
+                move& prevMove = moves[i-1];
+                bool isFirst = i == 1;
+                bool isLast = i == (moves.size()-1);
+                blendCorner( prevMove, m, isFirst, isLast );
+            }
+        }
+    }
+
+    if ( blendMethod == CBM_CONSTANT_JERK_SEGMENTS ) {
+        for (size_t i = 0; i < moves.size(); i++) {
+            move& m = moves[i];
+            std::vector<segment>& segs = m.segments;
+            segs.erase( std::remove_if(std::begin(segs), std::end(segs), [](segment& s) { return s.toDelete || s.duration <= 0; }), segs.end());
+        }
     }
 
     collateSegments();
+
+    if ( blendMethod == CBM_INTERPOLATED_MOVES )
+        calculateSchedules();
 
     return true;
 }
@@ -129,6 +159,11 @@ void planner::clear()
 {
     moves.clear();
     segments.clear();
+}
+
+void planner::setCornerBlendMethod(cornerBlendMethod m)
+{
+    blendMethod = m;
 }
 
 void planner::calculateMove(move& m)
@@ -202,13 +237,13 @@ void planner::calculateMove(move& m)
         double totalDistance =  0.5 * j * t * TL * TL   + 1.5 * j * t * t * TL   + j * t * t * t;
 
         if ( totalDistance > halfDistance ) {
-            double qa = 0.5 * j * t;
-            double qb = 1.5 * j * t * t;
-            double qc = j * t * t * t       - halfDistance;
-            double x0 = -99999;
-            double x1 = -99999;
+            scv_float qa = 0.5 * j * t;
+            scv_float qb = 1.5 * j * t * t;
+            scv_float qc = j * t * t * t       - halfDistance;
+            scv_float x0 = -99999;
+            scv_float x1 = -99999;
             gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
-            double bestSolution = max(x0, x1);
+            scv_float bestSolution = max(x0, x1);
             if ( bestSolution >= 0 )
                 TL = bestSolution;
         }
@@ -328,6 +363,65 @@ void planner::calculateMove(move& m)
     m.segments.push_back(c7);
 }
 
+void planner::calculateSchedules() {
+
+    if ( moves.empty() )
+        return;
+
+    for (size_t i = 0; i < moves.size(); i++) {
+        move& m = moves[i];
+        m.duration = 0;
+        for (size_t i = 0; i < m.segments.size(); i++) {
+            segment& s = m.segments[i];
+            m.duration += s.duration;
+        }
+    }
+
+    move &firstMove = moves[0];
+    firstMove.scheduledTime = 0;
+
+    bool lastMoveHadNoBlend = false;
+
+    for (size_t i = 1; i < moves.size(); i++) {
+        move& m0 = moves[i-1];
+        move& m1 = moves[i];
+
+        if ( m1.blendType == CBT_NONE ) {
+            m1.scheduledTime = m0.scheduledTime + m0.duration;
+            lastMoveHadNoBlend = true;
+            continue;
+        }
+
+        bool isFirst = i == 1 || lastMoveHadNoBlend;
+        bool isLast = (i == moves.size()-1) || ((i < moves.size()-1) && (moves[i+1].blendType == CBT_NONE));
+
+        lastMoveHadNoBlend = false;
+
+        scv_float rampDuration0 = m0.segments[0].duration + m0.segments[1].duration;
+        scv_float rampDuration1 = m1.segments[0].duration + m1.segments[1].duration;
+        if ( m0.segments.size() == 7 )
+            rampDuration0 += m0.segments[2].duration;
+        if ( m1.segments.size() == 7 )
+            rampDuration1 += m1.segments[2].duration;
+
+        float allowableFraction0 = isFirst ? 0.99 : 0.5;
+        float allowableFraction1 = isLast  ? 0.99 : 0.5;
+
+        allowableFraction0 = min(allowableFraction0, maxOverlapFraction);
+        allowableFraction1 = min(allowableFraction1, maxOverlapFraction);
+
+        float allowableDuration0 = allowableFraction0 * m0.duration;
+        float allowableDuration1 = allowableFraction1 * m1.duration;
+
+        scv_float blendTime = max(rampDuration0, rampDuration1);
+        blendTime = min(blendTime, min(allowableDuration0,allowableDuration1));
+
+        if ( blendTime > 0 )
+            m1.scheduledTime = m0.scheduledTime + m0.duration - blendTime;
+    }
+
+}
+
 void planner::getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
 {
     *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
@@ -336,12 +430,12 @@ void planner::getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* 
     *jerk = s.jerk;
 }
 
-void planner::getSegmentPosition(segment& s, double t, scv::vec3* pos )
+void getSegmentPosition(segment& s, double t, scv::vec3* pos )
 {
     *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
 }
 
-bool planner::getTrajectoryState(double t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
+bool planner::getTrajectoryState_constantJerkSegments(scv_float t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
 {
     // no segments, return zero vectors
     if ( segments.empty() ) {
@@ -382,7 +476,96 @@ bool planner::getTrajectoryState(double t, int *segmentIndex, vec3 *pos, vec3 *v
     return false;
 }
 
-scv_float planner::getTraverseTime()
+void getMoveSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
+{
+    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
+    *vel = s.vel + (t * s.acc) + ((t * t) / 2.0) * s.jerk;
+    *acc = s.acc + t * s.jerk;
+    *jerk = s.jerk;
+}
+
+bool getMoveTrajectoryState(move &m, double t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
+{
+    // no segments, return zero vectors
+    if ( m.segments.empty() ) {
+        *segmentIndex = -1;
+        *pos = vec3_zero;
+        *vel = vec3_zero;
+        *acc = vec3_zero;
+        *jerk = vec3_zero;
+        return false;
+    }
+
+    // time is negative, return starting point
+    if ( t <= 0 ) {
+        *pos = m.segments[0].pos;
+        *vel = m.segments[0].vel;
+        *acc = m.segments[0].acc;
+        *jerk = m.segments[0].jerk;
+        return t == 0;
+    }
+
+    double totalT = 0;
+    size_t segmentInd = 0;
+    while (segmentInd < m.segments.size()) {
+        *segmentIndex = segmentInd;
+        segment& s = m.segments[segmentInd];
+        double endT = totalT + s.duration;
+        if ( t >= totalT && t < endT ) {
+            getMoveSegmentState(s, t - totalT, pos, vel, acc, jerk);
+            return true;
+        }
+        segmentInd++;
+        totalT = endT;
+    }
+
+    // time exceeds total time of trajectory, return end point
+    scv::segment& lastSegment = m.segments.back();
+    getMoveSegmentState(lastSegment, lastSegment.duration, pos, vel, acc, jerk);
+    return false;
+}
+
+bool planner::getTrajectoryState_interpolatedMoves(scv_float time, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
+{
+    bool stillRunning = false;
+    *pos = vec3_zero;
+    *vel = vec3_zero;
+    *acc = vec3_zero;
+    *jerk = vec3_zero;
+
+    vec3 lastSrc = vec3_zero;
+    int movesUsed = 0;
+
+    for (size_t i = 0; i < moves.size(); i++) {
+        move& m = moves[i];
+        float mEnd = m.scheduledTime + m.duration;
+        if ( time < m.scheduledTime || time > mEnd )
+            continue;
+
+        lastSrc = m.src;
+        movesUsed++;
+
+        double dt = time - m.scheduledTime;
+        int segmentIndex;
+        vec3 p, v, a, j;
+        stillRunning |= getMoveTrajectoryState(m, dt, &segmentIndex, &p, &v, &a, &j);
+        *pos += p;
+        *vel += v;
+        *acc += a;
+        *jerk += j;
+    }
+
+    if ( movesUsed > 1 ) {
+        *pos -= lastSrc;
+        *segmentIndex = 0;
+    }
+    else
+        *segmentIndex = 1;
+
+    return stillRunning;
+}
+
+scv_float planner::getTraverseTime_constantJerkSegments()
 {
     scv_float t = 0;
     size_t segmentInd = 0;
@@ -394,15 +577,43 @@ scv_float planner::getTraverseTime()
     return t;
 }
 
+scv_float planner::getTraverseTime_interpolatedMoves()
+{
+    scv_float t = 0;
+    for (size_t i = 0; i < moves.size(); i++) {
+        move& m = moves[i];
+        scv_float endTime = m.scheduledTime + m.duration;
+        if ( endTime > t )
+            t = endTime;
+    }
+    return t;
+}
+
+float planner::getTraverseTime()
+{
+    if ( blendMethod == CBM_INTERPOLATED_MOVES )
+        return getTraverseTime_interpolatedMoves();
+    else
+        return getTraverseTime_constantJerkSegments();
+}
+
 void planner::resetTraverse()
 {
     traversal_segmentIndex = 0;
     traversal_segmentTime = 0;
+
+    traversal_time = 0;
+    traversal_pos = vec3_zero;
+    for (size_t i = 0; i < moves.size(); i++) {
+        move& m = moves[i];
+        m.traversal_segmentIndex = 0;
+        m.traversal_segmentTime = 0;
+    }
 }
 
-bool planner::advanceTraverse(double dt, vec3 *p)
+bool planner::advanceTraverse_constantJerkSegments(scv_float dt, vec3 *p)
 {
-    if ( segments.size() < 1 ) {
+    if ( segments.empty() ) {
         *p = vec3_zero;
         return false;
     }
@@ -434,7 +645,92 @@ bool planner::advanceTraverse(double dt, vec3 *p)
     return true;
 }
 
-scv::vec3 getClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir, scv::vec3 point, double* d)
+bool advanceMoveTraverse(move &m, scv_float dt, vec3 *p)
+{
+    if ( m.segments.empty() ) {
+        *p = vec3_zero;
+        return false;
+    }
+
+    m.traversal_segmentTime += dt;
+    segment seg = m.segments[m.traversal_segmentIndex];
+
+    // Use 'while' here to consume zero-duration (or otherwise very short) segments immediately!
+    // It's pretty important to make sure that dt is actually within the next segment instead of
+    // just assuming it is, otherwise we might return a location beyond the end of the next
+    // segment, and then in the following iteration a location near the start of the following
+    // segment, which could potentially reverse the direction of travel!
+    while ( m.traversal_segmentTime > seg.duration ) {
+        // exceeded current segment
+        if ( m.traversal_segmentIndex < ((int)m.segments.size()-1) ) {
+            // more segments remain
+            m.traversal_segmentIndex++;
+            m.traversal_segmentTime -= seg.duration;
+            seg = m.segments[m.traversal_segmentIndex];
+        }
+        else {
+            // already on final segment
+            getSegmentPosition(seg, seg.duration, p);
+            return false;
+        }
+    }
+
+    getSegmentPosition(seg, m.traversal_segmentTime, p);
+    return true;
+}
+
+bool planner::advanceTraverse_interpolatedMoves(scv_float dt, vec3 *pos)
+{
+    bool stillRunning = false;
+    *pos = vec3_zero;
+
+    vec3 lastSrc = vec3_zero;
+    int movesUsed = 0;
+    bool movesRemain = false;
+
+    traversal_time += dt;
+
+    for (size_t i = 0; i < moves.size(); i++) {
+        move& m = moves[i];
+        if ( traversal_time < m.scheduledTime ) {
+            movesRemain = true;
+            break;
+        }
+        if ( traversal_time > m.scheduledTime + m.duration )
+            continue;
+
+        lastSrc = m.src;
+        movesUsed++;
+
+        vec3 p;
+        stillRunning |= advanceMoveTraverse(m, dt, &p);
+        //p += m.src;
+        *pos += p;
+    }
+
+    if ( movesUsed > 0 ) {
+        if ( movesUsed > 1 )
+            *pos -= lastSrc;
+        traversal_pos = *pos;
+    }
+    else {
+        *pos = traversal_pos;
+        if ( movesRemain )
+            return true;
+    }
+
+    return stillRunning;
+}
+
+bool planner::advanceTraverse(scv_float dt, vec3 *pos)
+{
+    if ( blendMethod == CBM_INTERPOLATED_MOVES )
+        return advanceTraverse_interpolatedMoves(dt, pos);
+    else
+        return advanceTraverse_constantJerkSegments(dt, pos);
+}
+
+scv::vec3 getClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir, scv::vec3 point, scv_float* d)
 {
     *d = scv::dot( point - line_start, line_dir);
     return line_start + *d * line_dir;
@@ -610,15 +906,15 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
         // A special annoying case of movement going back in the exact direction it came from.
 
-        double curveSpan = 0; // the furthest point the deceleration curve will reach, measured from the start (or finish) point, whichever is furthest
+        scv_float curveSpan = 0; // the furthest point the deceleration curve will reach, measured from the start (or finish) point, whichever is furthest
 
-        double qa = j.Length() / 2.0;
-        double qb = 0;
-        double qc = -v0.Length();
-        double x0 = -99999;
-        double x1 = -99999;
+        scv_float qa = j.Length() / 2.0;
+        scv_float qb = 0;
+        scv_float qc = -v0.Length();
+        scv_float x0 = -99999;
+        scv_float x1 = -99999;
         gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
-        double t = scv::max(x0, x1);
+        scv_float t = scv::max(x0, x1);
 
         scv::vec3 p0 =      (t * v0) + (( t * t * t) / 6.0) * j; // furthest point reached in first half of reversal
         curveSpan = scv::max(curveSpan, p0.Length());
@@ -637,7 +933,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         t = T;
         scv::vec3 maxJerkDelta = 2 * t * v0    +    (t * t * t) * j;
 
-        double longestAllowableLength = (startPoint - m0dstPos).Length();
+        scv_float longestAllowableLength = (startPoint - m0dstPos).Length();
         longestAllowableLength = scv::min(longestAllowableLength, (endPoint - m0dstPos).Length());
         if ( longestAllowableLength == 0 )
             return; // impossible
@@ -691,9 +987,9 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
         if ( isFirst && m1.blendType == CBT_MIN_JERK ) {
             if ( m1.blendClearance >= 0 ) {
-                double distanceToMid = (seg0Start - m0srcPos).Length();
-                double distanceToEarliest = (seg0.pos - m0srcPos).Length();
-                double useClearance = max(distanceToEarliest, min(m1.blendClearance, distanceToMid));
+                scv_float distanceToMid = (seg0Start - m0srcPos).Length();
+                scv_float distanceToEarliest = (seg0.pos - m0srcPos).Length();
+                scv_float useClearance = max(distanceToEarliest, min(m1.blendClearance, distanceToMid));
                 seg0Start = m0srcPos + useClearance * m0dir;
             }
             else
@@ -701,9 +997,9 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         }
         else if ( isLast && m1.blendType == CBT_MIN_JERK ) {
             if ( m1.blendClearance >= 0 ) {
-                double distanceToMid = (seg1End - m1dstPos).Length();
-                double distanceToLatest = (seg2.pos - m1dstPos).Length();
-                double useClearance = max(distanceToLatest, min(m1.blendClearance, distanceToMid));
+                scv_float distanceToMid = (seg1End - m1dstPos).Length();
+                scv_float distanceToLatest = (seg2.pos - m1dstPos).Length();
+                scv_float useClearance = max(distanceToLatest, min(m1.blendClearance, distanceToMid));
                 seg1End = m1dstPos - useClearance * m1dir;
             }
             else
@@ -721,15 +1017,15 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
         dirForProjection.Normalize();
 
-        double A0, A1, B0, B1;
+        scv_float A0, A1, B0, B1;
 
         getClosestPointOnInfiniteLine( projBase, dirForProjection, seg0Start, &A0);
         getClosestPointOnInfiniteLine( projBase, dirForProjection, seg0End, &A1 );
         getClosestPointOnInfiniteLine( projBase, dirForProjection, seg1Start, &B0 );
         getClosestPointOnInfiniteLine( projBase, dirForProjection, seg1End, &B1 );
 
-        double D0 = A1;
-        double D1 = B0;
+        scv_float D0 = A1;
+        scv_float D1 = B0;
 
         D0 = A0;
         D1 = B1;
@@ -889,23 +1185,23 @@ void planner::collateSegments()
     }
 }
 
-void planner::setPositionLimits(double lx, double ly, double lz, double ux, double uy, double uz)
+void planner::setPositionLimits(scv_float lx, scv_float ly, scv_float lz, scv_float ux, scv_float uy, scv_float uz)
 {
     posLimitLower = vec3(lx,ly,lz);
     posLimitUpper = vec3(ux,uy,uz);
 }
 
-void planner::setVelocityLimits(double x, double y, double z)
+void planner::setVelocityLimits(scv_float x, scv_float y, scv_float z)
 {
     velLimit = vec3(x,y,z);
 }
 
-void planner::setAccelerationLimits(double x, double y, double z)
+void planner::setAccelerationLimits(scv_float x, scv_float y, scv_float z)
 {
     accLimit = vec3(x,y,z);
 }
 
-void planner::setJerkLimits(double x, double y, double z)
+void planner::setJerkLimits(scv_float x, scv_float y, scv_float z)
 {
     jerkLimit = vec3(x,y,z);
 }
@@ -923,14 +1219,23 @@ void planner::printConstraints()
 void planner::printMoves()
 {
     for (size_t i = 0; i < moves.size(); i++) {
-        move& l = moves[i];
-        printf("  Move %d:\n", (int)i);
-        printf("    src: %f, %f, %f\n", l.src.x, l.src.y, l.src.z);
-        printf("    dst: %f, %f, %f\n", l.dst.x, l.dst.y, l.dst.z);
-        printf("    Vel: %f\n", l.vel);
-        printf("    Acc: %f\n", l.acc);
-        printf("    Jerk: %f\n", l.jerk);
-        printf("    Blend: %s\n", l.blendType==CBT_MAX_JERK ? "max jerk":l.blendType==CBT_MIN_JERK?"min jerk":"none");
+        move& m = moves[i];
+        /*printf("  Move %d:\n", (int)i);
+        printf("    src: %f, %f, %f\n", m.src.x, m.src.y, m.src.z);
+        printf("    dst: %f, %f, %f\n", m.dst.x, m.dst.y, m.dst.z);
+        printf("    Vel: %f\n", m.vel);
+        printf("    Acc: %f\n", m.acc);
+        printf("    Jerk: %f\n", m.jerk);
+        printf("    Blend: %s\n", m.blendType==CBT_MAX_JERK ? "max jerk":m.blendType==CBT_MIN_JERK?"min jerk":"none");
+*/
+        /*float duration = 0;
+        for (size_t i = 0; i < m.segments.size(); i++) {
+            segment& s = m.segments[i];
+            duration += s.duration;
+        }*/
+        //printf("    Scheduled: %f\n", m.scheduledTime);
+        //printf("    Duration: %f\n", m.duration);
+        printf("    Span: %f %f\n", m.scheduledTime, m.scheduledTime + m.duration);
     }
 }
 

@@ -16,7 +16,7 @@ namespace scv {
         dir = abs(dir);
         vec3 v = lim.Length() * dir;
 
-        double f = 1;
+        scv_float f = 1;
         if ( v.x != 0 )
             f = min(f, lim.x / v.x);
         if ( v.y != 0 )

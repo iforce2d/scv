@@ -89,6 +89,7 @@ float plotTime[MAXPLOTPOINTS]; // x axis of the plot, all others are y-axis valu
 float plotPosX[MAXPLOTPOINTS], plotPosY[MAXPLOTPOINTS], plotPosZ[MAXPLOTPOINTS];
 float plotVelX[MAXPLOTPOINTS], plotVelY[MAXPLOTPOINTS], plotVelZ[MAXPLOTPOINTS];
 float plotAccX[MAXPLOTPOINTS], plotAccY[MAXPLOTPOINTS], plotAccZ[MAXPLOTPOINTS];
+float plotJerkX[MAXPLOTPOINTS], plotJerkY[MAXPLOTPOINTS], plotJerkZ[MAXPLOTPOINTS];
 float plotVelMag[MAXPLOTPOINTS], plotAccMag[MAXPLOTPOINTS], plotJerkMag[MAXPLOTPOINTS];
 int numPlotPoints = 0; // how many plot points are actually filled
 
@@ -106,7 +107,7 @@ bool showControlPoints = true;
 
 bool haveViolation = false;
 
-bool violation(vec3& p, vec3& j, vec3& dp, vec3& dv, vec3& da, vec3& dj) {
+bool violation(vec3& p, vec3& j, vec3& dp, vec3& dv, vec3& da) {
     double margin = 1.0001;
     if ( p.x < plan.posLimitLower.x * margin ) return true;
     if ( p.y < plan.posLimitLower.y * margin ) return true;
@@ -139,6 +140,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     // calculate the trajectory every frame, and measure the time taken
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     plan.calculateMoves();
+    plan.calculateSchedules();
     std::chrono::steady_clock::time_point t1 =   std::chrono::steady_clock::now();
 
     // update the moving average
@@ -166,7 +168,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    gluPerspective( 45, aspectRatio, 1, 100 );
+    gluPerspective( 45, aspectRatio, 1, 1000 );
 
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
@@ -188,20 +190,28 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     glBegin(GL_POINTS);
 
     vec3 p, v, a, j; // position, velocity, acceleration, jerk
-    vec3 lp, lv, la, lj;
-    double t = 0;
+    vec3 lp, lv, la;
+    scv_float t = 0;
     int count = 0;
     int segmentIndex;
     while ( true ) {
 
-        bool stillOnPath = plan.getTrajectoryState(t, &segmentIndex, &p, &v, &a, &j);
+        if ( t > 0.7 ) {
+            int adf = 3;
+            adf += 2;
+        }
+
+        bool stillOnPath = false;
+        if ( plan.blendMethod == CBM_INTERPOLATED_MOVES )
+            stillOnPath = plan.getTrajectoryState_interpolatedMoves(t, &segmentIndex, &p, &v, &a, &j);
+        else
+            stillOnPath = plan.getTrajectoryState_constantJerkSegments(t, &segmentIndex, &p, &v, &a, &j);
 
         vec3 dp = p - lp;
         vec3 dv = v - lv;
         vec3 da = a - la;
-        vec3 dj = j - lj;
 
-        if ( count > 0 && violation(p, j, dp, dv, da, dj) ) {
+        if ( count > 0 && violation(p, j, dp, dv, da) ) {
             haveViolation = true;
             vp = p;
         }
@@ -222,6 +232,9 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
             plotAccX[count] = a.x;
             plotAccY[count] = a.y;
             plotAccZ[count] = a.z;
+            plotJerkX[count] = j.x;
+            plotJerkY[count] = j.y;
+            plotJerkZ[count] = j.z;
             plotVelMag[count] = v.Length();
             plotAccMag[count] = a.Length();
             plotJerkMag[count] = j.Length();
@@ -236,7 +249,6 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
         lp = p;
         lv = v;
         la = a;
-        lj = j;
     }
 
     /*size_t segmentIndex = 0;
@@ -291,7 +303,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 
     glEnd();
 
-    numPlotPoints = scv::min(count, MAXPLOTPOINTS);
+    numPlotPoints = scv::min(count-1, MAXPLOTPOINTS);
 
     if ( showControlPoints ) {
         glPointSize(8);
@@ -337,15 +349,15 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 void showVec3Editor(const char* label, vec3 *v) {
     char n[128];
     sprintf(n, "%s X", label);
-    ImGui::InputDouble(n, &v->x, 0.1f, 1.0f);
+    ImGui::InputFloat(n, &v->x, 0.1f, 1.0f);
     sprintf(n, "%s Y", label);
-    ImGui::InputDouble(n, &v->y, 0.1f, 1.0f);
+    ImGui::InputFloat(n, &v->y, 0.1f, 1.0f);
     sprintf(n, "%s Z", label);
-    ImGui::InputDouble(n, &v->z, 0.1f, 1.0f);
+    ImGui::InputFloat(n, &v->z, 0.1f, 1.0f);
 }
 
 void showPlots() {
-    if (ImPlot::BeginPlot("Line Plots")) {
+    if (ImPlot::BeginPlot("Line Plots", ImVec2(800,600))) {
         ImPlot::SetupAxes("t","");
         ImPlot::PlotLine("Pos X", plotTime, plotPosX, numPlotPoints);
         ImPlot::PlotLine("Pos Y", plotTime, plotPosY, numPlotPoints);
@@ -356,6 +368,9 @@ void showPlots() {
         ImPlot::PlotLine("Acc X", plotTime, plotAccX, numPlotPoints);
         ImPlot::PlotLine("Acc Y", plotTime, plotAccY, numPlotPoints);
         ImPlot::PlotLine("Acc Z", plotTime, plotAccZ, numPlotPoints);
+        ImPlot::PlotLine("Jerk X", plotTime, plotJerkX, numPlotPoints);
+        ImPlot::PlotLine("Jerk Y", plotTime, plotJerkY, numPlotPoints);
+        ImPlot::PlotLine("Jerk Z", plotTime, plotJerkZ, numPlotPoints);
         ImPlot::PlotLine("Vel mag", plotTime, plotVelMag, numPlotPoints);
         ImPlot::PlotLine("Acc mag", plotTime, plotAccMag, numPlotPoints);
         ImPlot::PlotLine("Jerk mag", plotTime, plotJerkMag, numPlotPoints);
@@ -409,10 +424,10 @@ void loadTestCase_default() {
     plan.setPositionLimits(0, 0, 0, 10, 10, 7);
 
     scv::move m;
-    m.blendClearance = 0;
-    m.vel = 12;
-    m.acc = 400;
-    m.jerk = 800;
+    m.blendClearance = 0.1;
+    m.vel = 10;
+    m.acc = 100;
+    m.jerk = 1000;
     m.blendType = CBT_MAX_JERK;
     m.src = vec3( 1, 1, 0);
     m.dst = vec3( 1, 1, 6);    plan.appendMove(m);
@@ -504,6 +519,42 @@ void loadTestCase_malformed() {
     plan.resetTraverse();
 }
 
+void loadTestCase_pnp() {
+    plan.clear();
+    plan.setPositionLimits(0, 0, -40,  400, 480, 0);
+    plan.setVelocityLimits(1000, 1000, 1000);
+    plan.setAccelerationLimits(50000, 50000, 50000);
+    plan.setJerkLimits(100000, 100000, 100000);
+
+    scv::move m;
+    m.vel = 300;
+    m.acc = 20000;
+    m.jerk = 40000;
+    m.blendType = CBT_MIN_JERK;
+    m.src = vec3(10, 10, -30);
+
+    m.dst = vec3(10, 10, 0);        plan.appendMove(m);
+    m.vel = 600;
+    m.dst = vec3(100, 100, 0);      plan.appendMove(m);
+    m.vel = 300;
+    m.dst = vec3(100, 100, -30);    plan.appendMove(m);
+
+    m.blendType = CBT_NONE;
+    m.dst = vec3(100, 100, 0);    plan.appendMove(m);
+    m.blendType = CBT_MIN_JERK;
+    m.vel = 600;
+    m.dst = vec3(100, 0, 0);    plan.appendMove(m);
+    m.vel = 300;
+    m.dst = vec3(100, 0, -30);    plan.appendMove(m);
+
+    plan.calculateMoves();
+    plan.resetTraverse();
+}
+
+
+
+float maxOverlapFraction = 0.8;
+
 int main(int, char**)
 {
     glfwSetErrorCallback(glfw_error_callback);
@@ -526,14 +577,17 @@ int main(int, char**)
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    //io.Fonts->AddFontFromFileTTF("/usr/share/fonts/gnu-free/FreeSans.ttf", 16.0f);
+    io.Fonts->AddFontFromFileTTF("/usr/share/fonts/gnu-free/FreeSans.ttf", 16.0f);
 
     camera.setLocation(-5, -10, 11);
     camera.setDirection( 28, -24 );
 
-    plan.setVelocityLimits(200, 200, 200);
-    plan.setAccelerationLimits(1000, 1000, 1000);
-    plan.setJerkLimits(2000, 2000, 2000);
+    cornerBlendMethod blendMethod = CBM_CONSTANT_JERK_SEGMENTS;
+    plan.setCornerBlendMethod(blendMethod);
+
+    plan.setVelocityLimits(20, 20, 20);
+    plan.setAccelerationLimits(100, 100, 100);
+    plan.setJerkLimits(1000, 1000, 1000);
 
     loadTestCase_default();
 
@@ -640,6 +694,13 @@ int main(int, char**)
 
             if (ImGui::CollapsingHeader("Planner settings"))
             {
+                int e = blendMethod;
+                ImGui::RadioButton("None", &e, CBM_NONE); ImGui::SameLine();
+                ImGui::RadioButton("Constant jerk segments", &e, CBM_CONSTANT_JERK_SEGMENTS); ImGui::SameLine();
+                ImGui::RadioButton("Interpolated moves", &e, CBM_INTERPOLATED_MOVES);
+                blendMethod =(cornerBlendMethod)e;
+                plan.setCornerBlendMethod(blendMethod);
+
                 ImGui::SeparatorText("Position constraint");
                 showVec3Editor("Pos", &plan.posLimitUpper);
 
@@ -686,6 +747,10 @@ int main(int, char**)
                 if (ImGui::Button("Malformed")) {
                     doRandomizePoints = false;
                     loadTestCase_malformed();
+                } ImGui::SameLine();
+                if (ImGui::Button("PNP")) {
+                    doRandomizePoints = false;
+                    loadTestCase_pnp();
                 }
 
                 ImGui::Checkbox("Randomize points", &doRandomizePoints);
@@ -769,6 +834,7 @@ int main(int, char**)
                 ImGui::Text("Average framerate: %.1f fps)", io.Framerate);
             }
 
+            ImGui::SliderFloat("Max overlap", &maxOverlapFraction, 0, 1);
             showPlots();
 
             ImGui::End();

@@ -22,6 +22,12 @@ namespace scv {
         }
     };
 
+    enum cornerBlendMethod {
+        CBM_NONE,
+        CBM_CONSTANT_JERK_SEGMENTS,
+        CBM_INTERPOLATED_MOVES
+    };
+
     enum cornerBlendType {
         CBT_NONE,
         CBT_MIN_JERK,
@@ -42,6 +48,11 @@ namespace scv {
 
         std::vector<segment> segments;
 
+        float duration;
+        float scheduledTime;
+        int traversal_segmentIndex;
+        scv_float traversal_segmentTime;
+
         move() {
             src = vec3_zero;
             dst = vec3_zero;
@@ -56,6 +67,7 @@ namespace scv {
     class planner
     {
     public: // Typically these would be private, they are public here for convenience in the visualizer
+        cornerBlendMethod blendMethod;
         vec3 posLimitLower;
         vec3 posLimitUpper;
         vec3 velLimit;
@@ -68,18 +80,30 @@ namespace scv {
         int traversal_segmentIndex;
         scv_float traversal_segmentTime;
 
+        vec3 traversal_pos;
+        scv_float traversal_time;
+
         void calculateMove(move& m);
+        void calculateSchedules();
         void blendCorner(move& m0, move& m1, bool isFirst, bool isLast);
         void collateSegments();
         void getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
-        void getSegmentPosition(segment& s, double t, scv::vec3* pos);
+        //void getSegmentPosition(segment& s, double t, scv::vec3* pos);
         std::vector<segment>& getSegments();
+
+        bool advanceTraverse_constantJerkSegments(scv_float dt, vec3* p);
+        bool advanceTraverse_interpolatedMoves(scv_float dt, vec3* p);
+
+        scv_float getTraverseTime_constantJerkSegments();
+        scv_float getTraverseTime_interpolatedMoves();
 
     // The actual public part would normally start from here
     public:
         planner();
 
         void clear();
+
+        void setCornerBlendMethod(cornerBlendMethod m);
 
         void setPositionLimits(scv_float lx, scv_float ly, scv_float lz, scv_float ux, scv_float uy, scv_float uz);
         void setVelocityLimits(scv_float x, scv_float y, scv_float z);
@@ -88,8 +112,10 @@ namespace scv {
 
         void appendMove( move& l );
         bool calculateMoves();
+        bool getTrajectoryState_constantJerkSegments(scv_float time, int *segmentIndex, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
+        bool getTrajectoryState_interpolatedMoves(scv_float time, int *segmentIndex, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
+
         scv_float getTraverseTime();
-        bool getTrajectoryState(scv_float time, int *segmentIndex, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
 
         void resetTraverse();
         bool advanceTraverse(scv_float dt, vec3* p);

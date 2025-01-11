@@ -4,7 +4,7 @@
 
 #include <math.h>
 
-#define scv_float       double
+#define scv_float       float
 
 namespace scv {
 
