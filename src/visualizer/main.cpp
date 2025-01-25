@@ -577,7 +577,9 @@ int main(int, char**)
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.Fonts->AddFontFromFileTTF("/usr/share/fonts/gnu-free/FreeSans.ttf", 16.0f);
+    // Load font from local project directory (relative path)
+    io.Fonts->AddFontFromFileTTF("./../fonts/FreeSans.ttf", 16.0f);
+
 
     camera.setLocation(-5, -10, 11);
     camera.setDirection( 28, -24 );
