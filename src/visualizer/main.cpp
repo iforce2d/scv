@@ -182,7 +182,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     }
 
 
-    vec3 vp;
+    vec3 vp = vec3_zero;
 
     numPlotPoints = 0;
 
@@ -191,6 +191,15 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 
     vec3 p, v, a, j; // position, velocity, acceleration, jerk
     vec3 lp, lv, la;
+    
+    p = vec3_zero;
+    v = vec3_zero;
+    a = vec3_zero;
+    
+	lp = p;
+	lv = v;
+	la = a;
+    
     scv_float t = 0;
     int count = 0;
     int segmentIndex;
@@ -577,7 +586,16 @@ int main(int, char**)
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.Fonts->AddFontFromFileTTF("/usr/share/fonts/gnu-free/FreeSans.ttf", 16.0f);
+    
+    // ImGui has a built-in font, but you can load your own here too. Sometimes I forget 
+    // to comment this out before committing, so check the file exists before trying to
+    // use it, to avoid an assertion when the file is not found.
+    const char* myFontFile = "/usr/share/fonts/gnu-free/FreeSans.ttf";
+    FILE* f = fopen(myFontFile, "r");
+    if ( f ) {
+		fclose( f );
+		io.Fonts->AddFontFromFileTTF(myFontFile, 16.0f);
+	}
 
     camera.setLocation(-5, -10, 11);
     camera.setDirection( 28, -24 );
