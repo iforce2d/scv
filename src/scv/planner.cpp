@@ -413,8 +413,9 @@ void planner::calculateSchedules() {
         float allowableDuration0 = allowableFraction0 * m0.duration;
         float allowableDuration1 = allowableFraction1 * m1.duration;
 
-        scv_float blendTime = max(rampDuration0, rampDuration1);
-        blendTime = min(blendTime, min(allowableDuration0,allowableDuration1));
+        //scv_float blendTime = max(rampDuration0, rampDuration1);
+        //blendTime = min(blendTime, min(allowableDuration0,allowableDuration1));
+        scv_float blendTime = min(allowableDuration0,allowableDuration1);
 
         if ( blendTime > 0 )
             m1.scheduledTime = m0.scheduledTime + m0.duration - blendTime;
