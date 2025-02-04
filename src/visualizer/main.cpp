@@ -5,12 +5,12 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl2.h"
 #include <stdio.h>
+
 #ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION
 #endif
-#include <GL/glew.h>
+
 #include <GLFW/glfw3.h>
-#include <GL/glu.h>
 
 #include <chrono>
 #include "implot.h"
@@ -28,6 +28,23 @@ GLFWwindow* window;
 
 Camera camera;      // handles a FPS game style input (WASD, left shift, left ctrl)
 planner plan;       // the S-curve planner we're testing
+
+#ifndef M_PI
+  #define M_PI 3.14159265358979323846
+#endif
+
+// https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
+void my_gluPerspective(float fovY, float aspect, float zNear, float zFar)
+{
+    float f = (scv_float)tan( M_PI / 2 - fovY / 2);
+    float m[16] = {
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (zFar + zNear) / (zNear - zFar), -1,
+        0, 0, (2 * zFar * zNear) / (zNear - zFar), 0
+    };
+    glMultMatrixf(m);
+}
 
 // These are to cycle between red/green/blue when drawing segments to differentiate them
 vec3 colors[] = {
@@ -60,7 +77,7 @@ void drawAxes() {
 // Draw a simple bounding box to show the position constraints of the planner
 void drawPlannerBoundingBox() {
     glLineWidth(1);
-    glColor3f(0,0.66,0);
+    glColor3f( 0.f, 0.66f, 0.f);
     glBegin(GL_LINE_LOOP);
     glVertex3d( plan.posLimitLower.x, plan.posLimitLower.y, plan.posLimitLower.z );
     glVertex3d( plan.posLimitUpper.x, plan.posLimitLower.y, plan.posLimitLower.z );
@@ -135,6 +152,9 @@ bool violation(vec3& p, vec3& j, vec3& dp, vec3& dv, vec3& da) {
 // re-enable scissor test after we're done.
 void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cmd) {
 
+    IM_UNUSED(parent_list);
+    IM_UNUSED(cmd);
+
     haveViolation = false;
 
     // calculate the trajectory every frame, and measure the time taken
@@ -144,10 +164,10 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     std::chrono::steady_clock::time_point t1 =   std::chrono::steady_clock::now();
 
     // update the moving average
-    long int timeTaken = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+    long int timeTaken = (long int)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
     calcTimeTotal -= calcTimes[calcTimeInd];
     calcTimeTotal += timeTaken;
-    calcTimes[calcTimeInd] = timeTaken;
+    calcTimes[calcTimeInd] = (scv_float)timeTaken;
     calcTimeInd = (calcTimeInd + 1) % NUMCALCTIMES;
     calcTime = 0;
     for (int i = 0; i < NUMCALCTIMES; i++) {
@@ -168,7 +188,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    gluPerspective( 45, aspectRatio, 1, 1000 );
+    my_gluPerspective(45, aspectRatio, 1, 1000);
 
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
@@ -249,7 +269,7 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
             plotJerkMag[count] = j.Length();
         }
 
-        t += 0.01;
+        t += 0.01f;
         count++;
 
         if ( ! stillOnPath )
@@ -357,11 +377,11 @@ void backgroundRenderCallback(const ImDrawList* parent_list, const ImDrawCmd* cm
 // A convenience function to show vec3 components as individual inputs
 void showVec3Editor(const char* label, vec3 *v) {
     char n[128];
-    sprintf(n, "%s X", label);
+    snprintf(n, sizeof(n), "%s X", label);
     ImGui::InputFloat(n, &v->x, 0.1f, 1.0f);
-    sprintf(n, "%s Y", label);
+    snprintf(n, sizeof(n), "%s Y", label);
     ImGui::InputFloat(n, &v->y, 0.1f, 1.0f);
-    sprintf(n, "%s Z", label);
+    snprintf(n, sizeof(n), "%s Z", label);
     ImGui::InputFloat(n, &v->z, 0.1f, 1.0f);
 }
 
@@ -433,7 +453,7 @@ void loadTestCase_default() {
     plan.setPositionLimits(0, 0, 0, 10, 10, 7);
 
     scv::move m;
-    m.blendClearance = 0.1;
+    m.blendClearance = 0.1f;
     m.vel = 10;
     m.acc = 100;
     m.jerk = 1000;
@@ -494,7 +514,7 @@ void loadTestCase_retrace() {
     m.dst = vec3( 9, 1, 0);  m.vel = 9;   plan.appendMove(m);
     m.dst = vec3( 9, 1, 9);  m.vel = 6;   plan.appendMove(m);
     m.dst = vec3( 9, 5, 9);  m.vel = 2;   plan.appendMove(m);
-    m.dst = vec3( 9,0.2,9);  m.vel = 3;   plan.appendMove(m);
+    m.dst = vec3( 9, 0.2f, 9); m.vel = 3; plan.appendMove(m);
     m.dst = vec3( 9, 9, 9);  m.vel = 10;  plan.appendMove(m);
 
     plan.calculateMoves();
@@ -562,7 +582,7 @@ void loadTestCase_pnp() {
 
 
 
-float maxOverlapFraction = 0.8;
+float maxOverlapFraction = 0.28f;
 
 int main(int, char**)
 {
@@ -588,11 +608,17 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     
     // ImGui has a built-in font, but you can load your own here too. Sometimes I forget 
-    // to comment this out before committing, so check the file exists before trying to
-    // use it, to avoid an assertion when the file is not found.
+    // to comment this out before committing, so let's check the file exists before trying
+    // to use it, to avoid an assertion when the file is not found.
     const char* myFontFile = "/usr/share/fonts/gnu-free/FreeSans.ttf";
-    FILE* f = fopen(myFontFile, "r");
-    if ( f ) {
+    FILE* f;
+#ifdef _WIN32
+    bool haveFontFile = ( 0 == fopen_s(&f, myFontFile, "r"));
+#else
+    f = fopen(myFontFile, "r");
+    bool haveFontFile = f;
+#endif
+    if ( haveFontFile ) {
 		fclose( f );
 		io.Fonts->AddFontFromFileTTF(myFontFile, 16.0f);
 	}
@@ -637,12 +663,12 @@ int main(int, char**)
         }
 
         if ( ImGui::IsMouseDown(1) ) {// hold right mouse button to pan view
-            float yaw = camera.yaw + io.MouseDelta.x * 0.05;
-            float pitch = camera.pitch + io.MouseDelta.y * -0.05;
+            float yaw = camera.yaw + io.MouseDelta.x * 0.05f;
+            float pitch = camera.pitch + io.MouseDelta.y * -0.05f;
             camera.setDirection(yaw, pitch);
         }
 
-        float camMoveSpeed = 0.15;
+        float camMoveSpeed = 0.15f;
 
         float right = 0;
         float forward = 0;
@@ -719,17 +745,21 @@ int main(int, char**)
                 blendMethod =(cornerBlendMethod)e;
                 plan.setCornerBlendMethod(blendMethod);
 
-                ImGui::SeparatorText("Position constraint");
-                showVec3Editor("Pos", &plan.posLimitUpper);
+                if (ImGui::TreeNode("Hard limits per axis")) {
+                    ImGui::SeparatorText("Position constraint");
+                    showVec3Editor("Pos", &plan.posLimitUpper);
 
-                ImGui::SeparatorText("Velocity constraint");
-                showVec3Editor("Vel", &plan.velLimit);
+                    ImGui::SeparatorText("Velocity constraint");
+                    showVec3Editor("Vel", &plan.velLimit);
 
-                ImGui::SeparatorText("Acceleration constraint");
-                showVec3Editor("Acc", &plan.accLimit);
+                    ImGui::SeparatorText("Acceleration constraint");
+                    showVec3Editor("Acc", &plan.accLimit);
 
-                ImGui::SeparatorText("Jerk constraint");
-                showVec3Editor("Jerk", &plan.jerkLimit);
+                    ImGui::SeparatorText("Jerk constraint");
+                    showVec3Editor("Jerk", &plan.jerkLimit);
+
+                    ImGui::TreePop();
+                }
             }
 
             if (ImGui::CollapsingHeader("Control points"))
@@ -804,20 +834,30 @@ int main(int, char**)
 
                     for (size_t i = 0; i < plan.moves.size(); i++) {
                         scv::move& m = plan.moves[i];
-                        sprintf(n, "Point %d", (int)(i+1));
+                        snprintf(n, sizeof(n), "Point %d", (int)(i+1));
                         if (ImGui::TreeNode(n)) {
 
                             ImGui::SeparatorText("Location");
-                            sprintf(n, "Loc %d", (int)(i+1));
+                            snprintf(n, sizeof(n), "Loc %d", (int)(i+1));
                             showVec3Editor(n, &m.dst);
-
                             ImGui::SeparatorText("Constraints");
-                            sprintf(n, "Vel %d", (int)(i+1));
-                            ImGui::InputDouble(n, &m.vel, 0.1f, 1.0f);
-                            sprintf(n, "Acc %d", (int)(i+1));
-                            ImGui::InputDouble(n, &m.acc, 0.1f, 1.0f);
-                            sprintf(n, "Jerk %d", (int)(i+1));
-                            ImGui::InputDouble(n, &m.jerk, 0.1f, 1.0f);
+
+                            double tmpf;
+
+                            snprintf(n, sizeof(n), "Vel %d", (int)(i+1));                            
+                            tmpf = m.vel;
+                            ImGui::InputDouble(n, &tmpf, 0.1f, 1.0f);
+                            m.vel = (scv_float)tmpf;
+
+                            snprintf(n, sizeof(n), "Acc %d", (int)(i+1));
+                            tmpf = m.acc;
+                            ImGui::InputDouble(n, &tmpf, 0.1f, 1.0f);
+                            m.acc = (scv_float)tmpf;
+
+                            snprintf(n, sizeof(n), "Jerk %d", (int)(i+1));                            
+                            tmpf = m.jerk;
+                            ImGui::InputDouble(n, &tmpf, 0.1f, 1.0f);
+                            m.jerk = (scv_float)tmpf;
 
                             if ( i > 0 ) {
                                 int e = m.blendType;

@@ -8,6 +8,8 @@
 
 extern float maxOverlapFraction;
 
+using namespace std;
+
 namespace scv {
 
 // Stolen from GSL library
@@ -34,14 +36,14 @@ static int gsl_poly_solve_quadratic(scv_float a, scv_float b, scv_float c, scv_f
       {
         if (b == 0)
           {
-            scv_float r = sqrt (-c / a);
+            scv_float r = (scv_float)sqrt (-c / a);
             *x0 = -r;
             *x1 =  r;
           }
         else
           {
-            scv_float sgnb = (b > 0 ? 1 : -1);
-            scv_float temp = -0.5 * (b + sgnb * sqrt (disc));
+            scv_float sgnb = (scv_float)(b > 0 ? 1 : -1);
+            scv_float temp = -0.5f * (b + sgnb * (scv_float)sqrt (disc));
             scv_float r1 = temp / a ;
             scv_float r2 = c / temp ;
 
@@ -60,8 +62,8 @@ static int gsl_poly_solve_quadratic(scv_float a, scv_float b, scv_float c, scv_f
       }
     else if (disc == 0)
       {
-        *x0 = -0.5 * b / a ;
-        *x1 = -0.5 * b / a ;
+        *x0 = (scv_float)( - 0.5 * b / a );
+        *x1 = (scv_float)( - 0.5 * b / a );
         return 2 ;
       }
     else
@@ -173,21 +175,21 @@ void planner::calculateMove(move& m)
     scv::vec3 srcPos = m.src;
     scv::vec3 dstPos = m.dst;
     scv::vec3 ldir = dstPos - srcPos;
-    double llen = ldir.Normalize();
+    scv_float llen = ldir.Normalize();
 
     scv::vec3 bv = getBoundedVector(ldir, velLimit);
     scv::vec3 ba = getBoundedVector(ldir, accLimit);
     scv::vec3 bj = getBoundedVector(ldir, jerkLimit);
 
-    double v = min( (double)bv.Length(), m.vel); // target speed
-    double a = min( (double)ba.Length(), m.acc);
-    double j = min( (double)bj.Length(), m.jerk);
-    double halfDistance = 0.5 * llen;     // half of the total distance we want to move
+    scv_float v = min( bv.Length(), m.vel); // target speed
+    scv_float a = min( ba.Length(), m.acc);
+    scv_float j = min( bj.Length(), m.jerk);
+    scv_float halfDistance = (scv_float) (0.5 * llen);     // half of the total distance we want to move
 
-    double T = 2 * a / j;   // duration of both curve sections
-    double T1 = 0.5 * T;    // duration of concave section
-    double TL = 0;          // duration of linear asection
-    double T2 = 0.5 * T;    // duration of convex section
+    scv_float T = 2 * a / j;   // duration of both curve sections
+    scv_float T1 = (scv_float)(0.5 * T);    // duration of concave section
+    scv_float TL = 0;          // duration of linear asection
+    scv_float T2 = (scv_float)(0.5 * T);    // duration of convex section
 
 
     // Values at the start of each segment. These will be updated as we go to keep track of the overall progress.
@@ -195,34 +197,34 @@ void planner::calculateMove(move& m)
     //    vs = starting velocity
     //    as = starting acceleration
     // They're all zero for the first segment, so let's set them for the second segment (the end of first the segment).
-    double t = T1;
-    double ps = (j * t * t * t) / 6.0;
-    double vs = (j * t * t) / 2.0;
-    double as = (j * t);
+    scv_float t = T1;
+    scv_float ps = (scv_float)((j * t * t * t) / 6.0);
+    scv_float vs = (scv_float)((j * t * t) / 2.0);
+    scv_float as = (j * t);
 
 
-    double dvInCurve = (a*a) / (2*j);   // change in velocity caused by a curve segment
-    double v1 = 0 + dvInCurve;          // velocity at end of concave curve
-    double v2 = v - dvInCurve;          // velocity at start of convex curve
+    scv_float dvInCurve = (a*a) / (2*j);   // change in velocity caused by a curve segment
+    scv_float v1 = 0 + dvInCurve;          // velocity at end of concave curve
+    scv_float v2 = v - dvInCurve;          // velocity at start of convex curve
 
     if ( v1 > v2 ) {
         // Fully performing both curve segments would exceed the velocity set-point.
         // Need to reduce the time spent in each curve segment.
         // Alter T1,T2 such that the concave and convex segments meet with a tangential transition.
-        T = sqrt(4*v*j) / j;
+        T = (scv_float)sqrt(4*v*j) / j;
         T1 = (j * T) / (2 * j);
         T2 = T - T1;
 
         // recalculate values for end of first segment
         t = T1;
-        ps = (j * t * t * t) / 6.0;
-        vs = (j * t * t) / 2.0;
+        ps = (scv_float)((j * t * t * t) / 6.0);
+        vs = (scv_float)((j * t * t) / 2.0);
         as = (j * t);
     }
     else if ( v2 > v1 ) {
         // The velocity change due to the curve segments is not enough to reach the set-point velocity.
         // Add a linear segment in between them where velocity will change with a constant acceleration.
-        double vr = v2 - v1; // remaining velocity to make up
+        scv_float vr = v2 - v1; // remaining velocity to make up
         TL = vr / as;        // duration of linear segment
 
         // The inserted linear segment must not cause the required distance to be exceeded.
@@ -234,11 +236,11 @@ void planner::calculateMove(move& m)
         //     tot =   0.5 * j * t * TL * TL   + 1.5 * j * t * t * TL   + j * t * t * t;
         // which is a quadratic equation for TL.
 
-        double totalDistance =  0.5 * j * t * TL * TL   + 1.5 * j * t * t * TL   + j * t * t * t;
+        scv_float totalDistance =  (scv_float)( 0.5 * j * t * TL * TL   + 1.5 * j * t * t * TL   + j * t * t * t );
 
         if ( totalDistance > halfDistance ) {
-            scv_float qa = 0.5 * j * t;
-            scv_float qb = 1.5 * j * t * t;
+            scv_float qa = (scv_float)(0.5 * j * t);
+            scv_float qb = (scv_float)(1.5 * j * t * t);
             scv_float qc = j * t * t * t       - halfDistance;
             scv_float x0 = -99999;
             scv_float x1 = -99999;
@@ -255,14 +257,14 @@ void planner::calculateMove(move& m)
         // Distance required is too short to allow fully performing both curves.
         // Reduce the time allowed in each curve. No linear phases will be used anywhere.
 
-        T = std::cbrt( halfDistance / j );     // this is the bothCurvesDistance equation above, solved for t
+        T = (scv_float)cbrt( halfDistance / j );     // this is the bothCurvesDistance equation above, solved for t
         T1 = T2 = T;    // same duration for both concave and convex curves
         TL = 0;
 
         // recalculate values for end of first segment
         t = T1;
-        ps = (j * t * t * t) / 6.0;
-        vs = (j * t * t) / 2.0;
+        ps = (scv_float)((j * t * t * t) / 6.0);
+        vs = (scv_float)((j * t * t) / 2.0);
         as = (j * t);
     }
 
@@ -290,7 +292,7 @@ void planner::calculateMove(move& m)
         m.segments.push_back(c2);
 
         t = TL;
-        ps += (vs * t) + (as * t * t) / 2.0;
+        ps += (vs * t) + (as * t * t) / (scv_float)2.0;
         vs += (as * t);
     }
 
@@ -304,13 +306,13 @@ void planner::calculateMove(move& m)
     m.segments.push_back(c3);
 
     t = T2;
-    ps += (vs * t) + ((as * t * t) / 2.0) - ((j * t * t * t) / 6.0);
-    vs += ((j * t * t) / 2.0);
+    ps += (vs * t) + ((as * t * t) / (scv_float)2.0) - ((j * t * t * t) / (scv_float)6.0);
+    vs += ((j * t * t) / (scv_float)2.0);
     as = 0;
 
     // segment 4, constant velocity linear phase (maybe)
-    double totalRiseDistance = 2 * ps;
-    double remainingDistance = llen - totalRiseDistance;
+    scv_float totalRiseDistance = 2 * ps;
+    scv_float remainingDistance = llen - totalRiseDistance;
     if ( remainingDistance > 0.000001 ) {
 
         segment c4;
@@ -321,7 +323,7 @@ void planner::calculateMove(move& m)
         c4.duration = remainingDistance / v;
         m.segments.push_back(c4);
 
-        ps += vs * c4.duration; // a nice simple calculation for a change
+        ps += vs * (scv_float)c4.duration; // a nice simple calculation for a change
     }
 
     // segment 5, convex falling
@@ -334,8 +336,8 @@ void planner::calculateMove(move& m)
     m.segments.push_back(c5);
 
     t = T2;
-    ps += (vs * t) + ((as * t * t) / 2.0) + (-j * t * t * t) / 6.0;
-    vs += (-j * t * t) / 2.0;
+    ps += (vs * t) + ((as * t * t) / (scv_float)2.0) + (-j * t * t * t) / (scv_float)6.0;
+    vs += (-j * t * t) / (scv_float)2.0;
     as += (-j * t);
 
     // segment 6, falling linear phase (maybe)
@@ -349,7 +351,7 @@ void planner::calculateMove(move& m)
         m.segments.push_back(c6);
 
         t = TL;
-        ps += (vs * t) + (as * t * t) / 2.0;
+        ps += (vs * t) + (as * t * t) / (scv_float)2.0;
         vs += (as * t);
     }
 
@@ -371,9 +373,9 @@ void planner::calculateSchedules() {
     for (size_t i = 0; i < moves.size(); i++) {
         move& m = moves[i];
         m.duration = 0;
-        for (size_t i = 0; i < m.segments.size(); i++) {
-            segment& s = m.segments[i];
-            m.duration += s.duration;
+        for (size_t k = 0; k < m.segments.size(); k++) {
+            segment& s = m.segments[k];
+            m.duration += (scv_float)s.duration;
         }
     }
 
@@ -404,8 +406,8 @@ void planner::calculateSchedules() {
         if ( m1.segments.size() == 7 )
             rampDuration1 += m1.segments[2].duration;
 
-        float allowableFraction0 = isFirst ? 0.99 : 0.5;
-        float allowableFraction1 = isLast  ? 0.99 : 0.5;
+        float allowableFraction0 = isFirst ? (scv_float)0.99 : (scv_float)0.5;
+        float allowableFraction1 = isLast  ? (scv_float)0.99 : (scv_float)0.5;
 
         allowableFraction0 = min(allowableFraction0, maxOverlapFraction);
         allowableFraction1 = min(allowableFraction1, maxOverlapFraction);
@@ -423,17 +425,17 @@ void planner::calculateSchedules() {
 
 }
 
-void planner::getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
+void planner::getSegmentState(segment& s, scv_float t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
 {
-    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
-    *vel = s.vel + (t * s.acc) + ((t * t) / 2.0) * s.jerk;
+    *pos = s.pos + (t * s.vel) + ((t * t) / (scv_float)2.0) * s.acc + ((t * t * t) / (scv_float)6.0) * s.jerk;
+    *vel = s.vel + (t * s.acc) + ((t * t) / (scv_float)2.0) * s.jerk;
     *acc = s.acc + t * s.jerk;
     *jerk = s.jerk;
 }
 
-void getSegmentPosition(segment& s, double t, scv::vec3* pos )
+void getSegmentPosition(segment& s, scv_float t, scv::vec3* pos )
 {
-    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
+    *pos = s.pos + (t * s.vel) + ((t * t) / (scv_float)2.0) * s.acc + ((t * t * t) / (scv_float)6.0) * s.jerk;
 }
 
 bool planner::getTrajectoryState_constantJerkSegments(scv_float t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
@@ -457,12 +459,12 @@ bool planner::getTrajectoryState_constantJerkSegments(scv_float t, int *segmentI
         return t == 0;
     }
 
-    double totalT = 0;
+    scv_float totalT = 0;
     size_t segmentInd = 0;
     while (segmentInd < segments.size()) {
-        *segmentIndex = segmentInd;
+        *segmentIndex = (int)segmentInd;
         segment& s = segments[segmentInd];
-        double endT = totalT + s.duration;
+        scv_float endT = totalT + s.duration;
         if ( t >= totalT && t < endT ) {
             getSegmentState(s, t - totalT, pos, vel, acc, jerk);
             return true;
@@ -477,15 +479,15 @@ bool planner::getTrajectoryState_constantJerkSegments(scv_float t, int *segmentI
     return false;
 }
 
-void getMoveSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
+void getMoveSegmentState(segment& s, scv_float t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk )
 {
-    *pos = s.pos + (t * s.vel) + ((t * t) / 2.0) * s.acc + ((t * t * t) / 6.0) * s.jerk;
-    *vel = s.vel + (t * s.acc) + ((t * t) / 2.0) * s.jerk;
+    *pos = s.pos + (t * s.vel) + ((t * t) / (scv_float)2.0) * s.acc + ((t * t * t) / (scv_float)6.0) * s.jerk;
+    *vel = s.vel + (t * s.acc) + ((t * t) / (scv_float)2.0) * s.jerk;
     *acc = s.acc + t * s.jerk;
     *jerk = s.jerk;
 }
 
-bool getMoveTrajectoryState(move &m, double t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
+bool getMoveTrajectoryState(move &m, scv_float t, int *segmentIndex, vec3 *pos, vec3 *vel, vec3 *acc, vec3 *jerk)
 {
     // no segments, return zero vectors
     if ( m.segments.empty() ) {
@@ -506,12 +508,12 @@ bool getMoveTrajectoryState(move &m, double t, int *segmentIndex, vec3 *pos, vec
         return t == 0;
     }
 
-    double totalT = 0;
+    scv_float totalT = 0;
     size_t segmentInd = 0;
     while (segmentInd < m.segments.size()) {
-        *segmentIndex = segmentInd;
+        *segmentIndex = (int)segmentInd;
         segment& s = m.segments[segmentInd];
-        double endT = totalT + s.duration;
+        scv_float endT = totalT + s.duration;
         if ( t >= totalT && t < endT ) {
             getMoveSegmentState(s, t - totalT, pos, vel, acc, jerk);
             return true;
@@ -546,10 +548,10 @@ bool planner::getTrajectoryState_interpolatedMoves(scv_float time, int *segmentI
         lastSrc = m.src;
         movesUsed++;
 
-        double dt = time - m.scheduledTime;
-        int segmentIndex;
+        scv_float dt = time - m.scheduledTime;
+        int tmpSegmentIndex;
         vec3 p, v, a, j;
-        stillRunning |= getMoveTrajectoryState(m, dt, &segmentIndex, &p, &v, &a, &j);
+        stillRunning |= getMoveTrajectoryState(m, dt, &tmpSegmentIndex, &p, &v, &a, &j);
         *pos += p;
         *vel += v;
         *acc += a;
@@ -618,6 +620,9 @@ bool planner::advanceTraverse_constantJerkSegments(scv_float dt, vec3 *p)
         *p = vec3_zero;
         return false;
     }
+
+    if (traversal_segmentIndex >= segments.size())
+        return false;
 
     traversal_segmentTime += dt;
     segment seg = segments[traversal_segmentIndex];
@@ -741,18 +746,18 @@ scv::vec3 getClosestPointOnInfiniteLine(scv::vec3 line_start, scv::vec3 line_dir
 scv_float calculateDurationFromJerkAndAcceleration(scv::vec3 j, scv::vec3 a)
 {
     if ( j.x != 0 )
-        return sqrt( a.x / j.x );
+        return (scv_float)sqrt( a.x / j.x );
     else if ( j.y != 0 )
-        return sqrt( a.y / j.y );
+        return (scv_float)sqrt( a.y / j.y );
     else if ( j.z != 0 )
-        return sqrt( a.z / j.z );
+        return (scv_float)sqrt( a.z / j.z );
     // jerk is zero, so duration would be infinite!
     return 0;
 }
 
 void markSkippedSegments(move& l, int whichEnd)
 {
-    int numSegments = l.segments.size();
+    int numSegments = (int)l.segments.size();
     if ( whichEnd == 0 ) { // remove the latter end
         if ( numSegments == 5 ) {
             l.segments[3].toDelete = true;
@@ -780,8 +785,8 @@ void markSkippedSegments(move& l, int whichEnd)
 void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 {
 
-    int numPrevSegments = m0.segments.size();
-    int numNextSegments = m1.segments.size();
+    int numPrevSegments = (int)m0.segments.size();
+    int numNextSegments = (int)m1.segments.size();
 
     if ( ! (numPrevSegments == 5 || numPrevSegments == 7) ||
          ! (numNextSegments == 5 || numNextSegments == 7))
@@ -815,44 +820,44 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     scv::vec3 j = jerkDir;
 
     // in each axis, make these vectors too long, then trim them down
-    a *= 1.5 * scv::max(accLimit.x, accLimit.y);
-    j *= 1.5 * scv::max(jerkLimit.x, jerkLimit.y);
+    a *= (scv_float)1.5 * scv::max(accLimit.x, accLimit.y);
+    j *= (scv_float)1.5 * scv::max(jerkLimit.x, jerkLimit.y);
 
     if ( fabs(a.x) > accLimit.x )
-        a *= accLimit.x / fabs(a.x);
+        a *= accLimit.x / (scv_float)fabs(a.x);
     if ( fabs(a.y) > accLimit.y )
-        a *= accLimit.y / fabs(a.y);
+        a *= accLimit.y / (scv_float)fabs(a.y);
     if ( fabs(a.z) > accLimit.z )
-        a *= accLimit.z / fabs(a.z);
+        a *= accLimit.z / (scv_float)fabs(a.z);
 
     if ( fabs(j.x) > jerkLimit.x )
-        j *= jerkLimit.x / fabs(j.x);
+        j *= jerkLimit.x / (scv_float)fabs(j.x);
     if ( fabs(j.y) > jerkLimit.y )
-        j *= jerkLimit.y / fabs(j.y);
+        j *= jerkLimit.y / (scv_float)fabs(j.y);
     if ( fabs(j.z) > jerkLimit.z )
-        j *= jerkLimit.z / fabs(j.z);
+        j *= jerkLimit.z / (scv_float)fabs(j.z);
 
-    double amag = a.Length();
-    double jmag = j.Length();
+    scv_float amag = a.Length();
+    scv_float jmag = j.Length();
     if ( m0.acc < amag )
         a *= m0.acc / amag;
     if ( m0.jerk < jmag )
         j *= m0.jerk / jmag;
 
-    double maxJerkLim = 1; // max allowable jerk for smooth velocity transition
+    scv_float maxJerkLim = 1; // max allowable jerk for smooth velocity transition
 
     // at least one component of dv should be non-zero, so use the highest one for this part
     if ( fabs(dv.x) > 0 ) {
-        double mjx = (a.x*a.x) / dv.x;
-        maxJerkLim = scv::min(maxJerkLim, (double)fabsf(mjx / j.x));
+        scv_float mjx = (a.x*a.x) / dv.x;
+        maxJerkLim = scv::min(maxJerkLim, (scv_float)fabsf(mjx / j.x));
     }
     if ( fabs(dv.y) > 0 ) {
-        double mjy = (a.y*a.y) / dv.y;
-        maxJerkLim = scv::min(maxJerkLim, (double)fabsf(mjy / j.y));
+        scv_float mjy = (a.y*a.y) / dv.y;
+        maxJerkLim = scv::min(maxJerkLim, (scv_float)fabsf(mjy / j.y));
     }
     if ( fabs(dv.z) > 0 ) {
-        double mjz = (a.z*a.z) / dv.z;
-        maxJerkLim = scv::min(maxJerkLim, (double)fabsf(mjz / j.z));
+        scv_float mjz = (a.z*a.z) / dv.z;
+        maxJerkLim = scv::min(maxJerkLim, (scv_float)fabsf(mjz / j.z));
     }
 
     if ( maxJerkLim < 1 ) { // only use this to reduce jerk
@@ -865,17 +870,17 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     scv::vec3 earliestEnd;
     scv::vec3 latestEnd;
 
-    double maxJerkLength = 0;
+    scv_float maxJerkLength = 0;
 
 
-    double T = 0;
+    scv_float T = 0;
 
     scv::vec3 startPoint = 0.5 * (m0srcPos + m0dstPos);
     scv::vec3 endPoint =   0.5 * (m1srcPos + m1dstPos);
 
     if ( dv.Length() < 0.00001 ) {
-        double distance = (endPoint - startPoint).Length();
-        T = 0.5 * distance / v0.Length();
+        scv_float distance = (endPoint - startPoint).Length();
+        T = (scv_float)0.5 * distance / v0.Length();
     }
     else {
         T = calculateDurationFromJerkAndAcceleration(j, v1-v0);
@@ -883,14 +888,14 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
     bool doubleBack = false;
 
-    double dot = scv::dot(m1dir, m0dir);
-    dot = scv::min( 1.0, scv::max(-1.0, dot) );
-    float angleToTurn = acos( dot );
+    scv_float dot = scv::dot(m1dir, m0dir);
+    dot = scv::min( (scv_float)1.0, scv::max((scv_float) - 1.0, dot));
+    scv_float angleToTurn = (scv_float)acos( dot );
     if ( angleToTurn < 0.00001 ) {
 
         // easy case where movement doesn't turn
 
-        double t = T;
+        scv_float t = T;
 
         scv::vec3 maxJerkEndPoint = 2 * t * v0    +    (t * t * t) * j;
         maxJerkLength = maxJerkEndPoint.Length();
@@ -909,7 +914,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
         scv_float curveSpan = 0; // the furthest point the deceleration curve will reach, measured from the start (or finish) point, whichever is furthest
 
-        scv_float qa = j.Length() / 2.0;
+        scv_float qa = j.Length() / (scv_float)2.0;
         scv_float qb = 0;
         scv_float qc = -v0.Length();
         scv_float x0 = -99999;
@@ -917,10 +922,10 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
         scv_float t = scv::max(x0, x1);
 
-        scv::vec3 p0 =      (t * v0) + (( t * t * t) / 6.0) * j; // furthest point reached in first half of reversal
+        scv::vec3 p0 =      (t * v0) + (( t * t * t) / (scv_float)6.0) * j; // furthest point reached in first half of reversal
         curveSpan = scv::max(curveSpan, p0.Length());
 
-        qa = j.Length() / 2.0;
+        qa = j.Length() / (scv_float)2.0;
         qb = 0;
         qc = -v1.Length();
         x0 = 0;
@@ -928,7 +933,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         gsl_poly_solve_quadratic( qa, qb, qc, &x0, &x1 );
         t = scv::max(x0, x1);
 
-        scv::vec3 p1 = /*sh +*/ (t * v1) /*+ ((t * t) / 2.0) * ah*/ + ((t * t * t) / 6.0) * -j; // furthest point reached in second half of reversal
+        scv::vec3 p1 = (t * v1) + ((t * t * t) / (scv_float)6.0) * -j; // furthest point reached in second half of reversal
         curveSpan = scv::max(curveSpan, p1.Length());
 
         t = T;
@@ -939,7 +944,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         if ( longestAllowableLength == 0 )
             return; // impossible
 
-        double ratio = (curveSpan + maxJerkDelta.Length()) / longestAllowableLength;
+        scv_float ratio = (curveSpan + maxJerkDelta.Length()) / longestAllowableLength;
         if ( ratio > 1 )
             return; // not enough room
 
@@ -968,7 +973,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     }
     else {
 
-        double t = T;
+        scv_float t = T;
 
         scv::vec3 finalVelocity = v0 + t * t * j;
         finalVelocity.Normalize();
@@ -1043,15 +1048,15 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
             return;
         }
 
-        double ds[4];
+        scv_float ds[4];
         ds[0] = A0;
         ds[1] = A1;
         ds[2] = B0;
         ds[3] = B1;
         std::sort(std::begin(ds), std::end(ds));
 
-        double inner = ds[1];
-        double outer = ds[2];
+        scv_float inner = ds[1];
+        scv_float outer = ds[2];
         if ( fabs(inner) > fabs(outer) )
             std::swap(inner, outer);
 
@@ -1063,8 +1068,8 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         maxJerkLength = curveEndPoint.Length();
     }
 
-    double shortestAllowableLength = (latestStart - earliestEnd).Length();  // higher jerk
-    double longestAllowableLength = (earliestStart - latestEnd).Length(); // lower jerk
+    scv_float shortestAllowableLength = (latestStart - earliestEnd).Length();  // higher jerk
+    scv_float longestAllowableLength = (earliestStart - latestEnd).Length(); // lower jerk
 
     if ( longestAllowableLength != 0 ) {
         if ( maxJerkLength > (longestAllowableLength + 0.0000001) ) {
@@ -1080,7 +1085,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     else if ( m1.blendType == CBT_MAX_JERK ) {
         if ( maxJerkLength <= shortestAllowableLength ) {
             // lower jerk to fit shortest allowable curve
-            double ratio = maxJerkLength / shortestAllowableLength;
+            scv_float ratio = maxJerkLength / shortestAllowableLength;
             j *= ratio*ratio;
             T = calculateDurationFromJerkAndAcceleration(j, v1-v0);
             startPoint = latestStart;
@@ -1088,7 +1093,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
         }
         else {
             // jerk is already between the limits, just need to position the start correctly
-            double f = fabs((maxJerkLength - shortestAllowableLength) / (longestAllowableLength - shortestAllowableLength));
+            scv_float f = (scv_float)fabs((maxJerkLength - shortestAllowableLength) / (longestAllowableLength - shortestAllowableLength));
             scv::vec3 midStart = latestStart + f * (earliestStart - latestStart);
             scv::vec3 midEnd = earliestEnd + f * (latestEnd - earliestEnd);
             startPoint = midStart;
@@ -1101,7 +1106,7 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
 
         }
         else if ( longestAllowableLength != 0 ) { // a move that doubles back can have a zero length
-            double ratio = maxJerkLength / longestAllowableLength;
+            scv_float ratio = maxJerkLength / longestAllowableLength;
             j *= ratio*ratio;
             T = calculateDurationFromJerkAndAcceleration(j, v1-v0);
         }
@@ -1111,11 +1116,11 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     }
 
     // remove latter part of linear segment of original first line
-    double linear0Len = (startPoint - seg0.pos).Length();
+    scv_float linear0Len = (startPoint - seg0.pos).Length();
     seg0.duration = linear0Len / seg0.vel.Length();
 
     // remove first part of linear segment of original second line
-    double linear1Len = (seg2.pos - endPoint).Length();
+    scv_float linear1Len = (seg2.pos - endPoint).Length();
     seg1.duration = linear1Len / seg1.vel.Length();
     seg1.pos = endPoint;
 
@@ -1123,9 +1128,9 @@ void planner::blendCorner(move& m0, move& m1, bool isFirst, bool isLast)
     markSkippedSegments(m1, 1);
 
     // update midpoint values
-    double t = T;
-    scv::vec3 sh =      t * v0 + (( t * t * t) / 6.0) * j;
-    scv::vec3 vh = v0 + ((t * t) / 2.0) * j;
+    scv_float t = T;
+    scv::vec3 sh =      t * v0 + (( t * t * t) / (scv_float)6.0) * j;
+    scv::vec3 vh = v0 + ((t * t) / (scv_float)2.0) * j;
     scv::vec3 ah =      t * j;
 
     segment c0;

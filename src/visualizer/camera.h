@@ -6,7 +6,29 @@
 
 // A basic camera for FPS game style movement
 
-#define DEGTORAD 0.0174533
+#define DEGTORAD ((scv_float)0.0174532925f)
+
+// https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
+void my_gluLookAt(GLfloat eyeX, GLfloat eyeY, GLfloat eyeZ, GLfloat lookAtX, GLfloat lookAtY, GLfloat lookAtZ, GLfloat upX, GLfloat upY, GLfloat upZ) {
+
+    scv::vec3 F = scv::vec3(lookAtX - eyeX, lookAtY - eyeY, lookAtZ - eyeZ);
+    scv::vec3 UP = scv::vec3(upX, upY, upZ);
+    F.Normalize();
+    UP.Normalize();
+
+    scv::vec3 s = cross(F, UP);
+    scv::vec3 u = cross(s, F);
+
+    float m[16] = {
+         s.x,  u.x, -F.x, 0,
+         s.y,  u.y, -F.y, 0,
+         s.z,  u.z, -F.z, 0,
+         0, 0, 0,  1
+    };
+
+    glMultMatrixf(m);
+    glTranslatef(-eyeX, -eyeY, -eyeZ);
+}
 
 class Camera {
 public:
@@ -57,12 +79,13 @@ public:
 
     void gluLookAt()
     {
-        scv::vec3 focuspoint = location + forward;
-        ::gluLookAt(
+        focuspoint = location + forward;
+        my_gluLookAt(
             location.x, location.y, location.z,
             focuspoint.x, focuspoint.y, focuspoint.z,
             0, 0, 1
         );
+        
     }
 };
 

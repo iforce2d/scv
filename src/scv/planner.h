@@ -13,7 +13,7 @@ namespace scv {
         vec3 vel;
         vec3 acc;
         vec3 jerk;
-        double duration;
+        scv_float duration;
 
         bool toDelete;
 
@@ -40,16 +40,16 @@ namespace scv {
         vec3 dst;
 
         // constraints on the movement
-        double vel;
-        double acc;
-        double jerk;
+        scv_float vel;
+        scv_float acc;
+        scv_float jerk;
         cornerBlendType blendType;
         scv_float blendClearance;
 
         std::vector<segment> segments;
 
-        float duration;
-        float scheduledTime;
+        scv_float duration;
+        scv_float scheduledTime;
         int traversal_segmentIndex;
         scv_float traversal_segmentTime;
 
@@ -87,7 +87,7 @@ namespace scv {
         void calculateSchedules();
         void blendCorner(move& m0, move& m1, bool isFirst, bool isLast);
         void collateSegments();
-        void getSegmentState(segment& s, double t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
+        void getSegmentState(segment& s, scv_float t, vec3* pos, vec3* vel, vec3* acc, vec3* jerk );
         //void getSegmentPosition(segment& s, double t, scv::vec3* pos);
         std::vector<segment>& getSegments();
 

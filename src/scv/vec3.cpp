@@ -12,7 +12,7 @@ namespace scv {
         int yneg = dir.y < 0 ? -1 : 1;
         int xneg = dir.x < 0 ? -1 : 1;
         int zneg = dir.z < 0 ? -1 : 1;
-
+        
         dir = abs(dir);
         vec3 v = lim.Length() * dir;
 

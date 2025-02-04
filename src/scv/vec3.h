@@ -20,6 +20,16 @@ namespace scv {
 
         void Set(scv_float x_, scv_float y_, scv_float z_) { x = x_; y = y_; z = z_; }
 
+        scv_float& operator[] (size_t i)
+        {
+            switch (i) {
+            case 0: return x;
+            case 1: return y;
+            case 2: return z;
+            default: return x; // ??
+            }
+        }
+
         vec3 operator -() const { vec3 v; v.Set(-x, -y, -z); return v; }
 
         void operator += (const vec3& v)
@@ -44,7 +54,7 @@ namespace scv {
 
         scv_float Length() const
         {
-            return sqrt(x * x + y * y + z * z);
+            return (scv_float)sqrt(x * x + y * y + z * z);
         }
 
         scv_float LengthSquared() const
@@ -78,6 +88,15 @@ namespace scv {
         return a.x * b.x + a.y * b.y + a.z * b.z;
     }
 
+    inline vec3 cross(vec3 v1, vec3 v2)
+    {
+        return vec3(
+            v1.y * v2.z - v1.z * v2.y,
+            v1.z * v2.x - v1.x * v2.z,
+            v1.x * v2.y - v1.y * v2.x
+        );
+    }
+
     inline vec3 operator + (const vec3& a, const vec3& b)
     {
         return vec3(a.x + b.x, a.y + b.y, a.z + b.z);
@@ -99,7 +118,7 @@ namespace scv {
     }
 
     inline vec3 abs(const vec3& v) {
-        return vec3(fabs(v.x), fabs(v.y), fabs(v.z));
+        return vec3( (scv_float)fabs(v.x), (scv_float)fabs(v.y), (scv_float)fabs(v.z));
     }
 
     template <typename T>
