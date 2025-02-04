@@ -19,7 +19,7 @@ To run the visualizer app, after cloning this repo you'll need to pull the requi
 
     git submodule update --init
 
-Build with the default makefile like:
+On Linux, build with the default makefile like:
 
     cd src/visualizer
     make
@@ -30,6 +30,8 @@ Build with the default makefile like:
     mkdir build
     cd build
     cmake ../visualizer
+
+On Windows, you can use the Visual Studio project file in the src/visualizer folder.
 
 ## Usage
 
