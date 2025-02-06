@@ -38,5 +38,5 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLFW3 REQUIRED glfw3)
 
 # Correct way to link libraries
-target_link_libraries(visualizer OpenGL::GL GLU ${GLFW3_LIBRARIES})
+target_link_libraries(visualizer OpenGL::GL ${GLFW3_LIBRARIES})
 

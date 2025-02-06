@@ -6,7 +6,7 @@
 
 // A basic camera for FPS game style movement
 
-#define DEGTORAD ((scv_float)0.0174532925f)
+#define DEGTORAD ((scv_float)0.0174532925)
 
 // https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
 void my_gluLookAt(GLfloat eyeX, GLfloat eyeY, GLfloat eyeZ, GLfloat lookAtX, GLfloat lookAtY, GLfloat lookAtZ, GLfloat upX, GLfloat upY, GLfloat upZ) {

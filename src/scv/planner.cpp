@@ -621,7 +621,7 @@ bool planner::advanceTraverse_constantJerkSegments(scv_float dt, vec3 *p)
         return false;
     }
 
-    if (traversal_segmentIndex >= segments.size())
+    if (traversal_segmentIndex >= (int)segments.size())
         return false;
 
     traversal_segmentTime += dt;
